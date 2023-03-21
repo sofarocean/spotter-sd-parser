@@ -143,4 +143,4 @@ We encourage a standard [GitHub flow](https://docs.github.com/en/get-started/qui
 
 # License
 
-Apache 2.0.  See [LICENSE](../blob/main/LICENSE)
+Apache 2.0.  See [LICENSE](../main/LICENSE)
