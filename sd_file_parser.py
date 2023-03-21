@@ -580,7 +580,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         versionNumber=defaultVersion,IIRWeightType=defaultIIRWeightType ):
     """
     This functions loads all the gps-location data (located at *path*) from
-    a spotter into one datastructure and saves the result as a CSV file 
+    a Spotter into one datastructure and saves the result as a CSV file 
     (*outputFileName*).
     """
 
@@ -598,7 +598,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     # Load location data into a pandas dataframe object
     if reportProgress:
         #
-        print(f"Processing spotter displacement output - {kind}")
+        print(f"Processing Spotter displacement output - {kind}")
         #
     #        
 
@@ -778,7 +778,7 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
 
     #
     # This functions loads all the Spectral data (located at *path*) from
-    # a spotter into one datastructure and saves the result as a CSV file
+    # a Spotter into one datastructure and saves the result as a CSV file
     # (*outputFileName*).
     #
     import os
@@ -860,7 +860,7 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
     # Load spectral data into a pandas dataframe object
     if reportProgress:
         #
-        print('Processing spotter spectral output')
+        print('Processing Spotter spectral output')
         #
     #
     if versionNumber in [0,2,3]:
@@ -1083,7 +1083,7 @@ def getFileNames( path , suffix , message,versionFileList=None ):
         #
     #
     # Get the file list from the directory, and select only those files that
-    # match the spotter output filename signature
+    # match the Spotter output filename signature
     #
 
     if versionFileList is not None:
@@ -1114,7 +1114,7 @@ def getFileNames( path , suffix , message,versionFileList=None ):
                         fnmatch.fnmatch(filename, '????_' + suffix + '.csv') or
                         fnmatch.fnmatch(filename, '????_' + suffix + '.log'))]
     #
-    # Are there valid spotter files?
+    # Are there valid Spotter files?
     #    
     if len( fileNames ) < 1:
         #
@@ -1191,7 +1191,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         #
         # Get the function that maps milis to epochs
         #
-        # max int used for roll-over; spotter millis clock resets after reaching
+        # max int used for roll-over; Spotter millis clock resets after reaching
         # the max ints.
         max = 4294967295
 
