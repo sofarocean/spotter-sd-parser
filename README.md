@@ -137,6 +137,10 @@ https://content.sofarocean.com/hubfs/Spotter%20product%20documentation%20page/wa
     P.B.Smit | Oct, 2019 | 1.8.0            | SST Spotter update
     various  | Dec, 2021 | 1.8.0+, 2.0.0+   | Spotter v3 update
 
+# Contributing
+
+We encourage a standard [GitHub flow](https://docs.github.com/en/get-started/quickstart/github-flow):  please create a branch, and submit a pull request when ready.  Thanks in advance.
+
 # License
 
-Apache 2.0;  See `LICENSE`
+Apache 2.0.  See [LICENSE](../blob/main/LICENSE)
