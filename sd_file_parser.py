@@ -507,7 +507,7 @@ def main( path = None , outpath=None, outputFileType='CSV',
             #
             fileName = os.path.join( outpath , outFiles[suffix] + '.csv' )
             # 
-            # For each filetypem concatenate files to intermediate CSV files...
+            # For each filetype, concatenate files to intermediate CSV files...
 
             print( 'Concatenating all ' + suffix + ' files:')
             if not (cat(path=path, outputFileType='CSV',Suffix=suffix,
@@ -1195,7 +1195,6 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         # the max ints.
         max = 4294967295
 
-
         #Get the millis to epoch mapping from the FLT file
         milis_to_epoch = get_epoch_to_milis_relation(infile)
 
@@ -1205,10 +1204,11 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         previousvalue = 0
         for line in lines:
             if 'millis' in line:
-                outlines.append((line))
+                # header
+                outlines.append(line)
             else:
                 #
-                data  = line.split(',')
+                data = line.strip().split(',')
                 # last line can be empty, check if there are two entries (as expected)
                 if len(data) == 2:
 
@@ -1225,11 +1225,11 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
 
                     #Convert to epochtime from mapping
                     epoch = milis_to_epoch( value )
-
                     outlines.append(str( epoch ) + ' , ' + data[1])
                     previousvalue = value
-
-
+                else:
+                    # malformed line
+                    pass
 
         return '\n'.join(outlines) + '\n'
 
@@ -1402,7 +1402,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     if Suffix == 'SST':
                         if compatibility_version < 3:
                             lines = process_sst_lines(lines, fqfn)
-                    
+
                     if compress:
                         #
                         lines = [ line.encode('utf-8') for line in lines ]
@@ -1411,10 +1411,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                         # Strip dos newline char
                         lines = [ line.replace('\r','') for line in lines ]
 
-                    # Drop all lines that don't end with linefeed, 
-                    # to avoid concatenating incomplete data into
-                    # invalid data
-                    outfile.writelines( [ line for line in lines if line.endswith('\n') ] )
+                    outfile.writelines(lines)
                 except:
                     message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
                     log_errors(message)
