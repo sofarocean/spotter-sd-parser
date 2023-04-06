@@ -1,5 +1,6 @@
 # parser output in example dir(s)
 example_data/2021-01-15/*.csv
+displacement.csv
 
 # error output from parser
 error.txt
