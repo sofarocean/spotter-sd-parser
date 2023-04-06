@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+test epoch time conversion routines
+"""
+
 import unittest
 from sd_file_parser import epochToDateArray
 

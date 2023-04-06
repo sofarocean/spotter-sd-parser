@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+"""
+test spectral file parsing
+"""
+
 import os
 import shutil
 import tempfile
