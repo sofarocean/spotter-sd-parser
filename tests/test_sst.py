@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python3 -m unittest
 
 """
 test the SST parsing functions of the sd_file_parser.py
