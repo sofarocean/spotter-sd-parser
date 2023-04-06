@@ -1385,7 +1385,8 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
             #
             # Suffix is not 'SPC'
             #
-            with open(os.path.join( path,filename) ) as infile:
+            fqfn = os.path.join(path, filename)
+            with open(fqfn) as infile:
                 #
                 try:
                     lines = infile.readlines()
@@ -1400,7 +1401,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     # If SST file, map millis onto epochs
                     if Suffix == 'SST':
                         if compatibility_version < 3:
-                            lines = process_sst_lines(lines, filename)
+                            lines = process_sst_lines(lines, fqfn)
                     
                     if compress:
                         #
