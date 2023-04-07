@@ -1168,7 +1168,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
 
         flt_file = os.path.join(head,tail)
         data = pd.read_csv( flt_file ,index_col=False , usecols=(0,1))
-        data = data.apply(pd.to_numeric,errors='coerce')
+        data = data.apply(pd.to_numeric,errors='warn')
         data = data.values
         msk = np.isnan( data[:,0] )
         for ii in range( 0, data.ndim ):
@@ -1392,7 +1392,11 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                 #
                 try:
                     lines = infile.readlines()
-
+                except:
+                    message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
+                    log_errors(message)
+                    print(message)
+                else:
                     # if this is the first file of this type, keep the header
                     # otherwise, drop it
 
@@ -1414,10 +1418,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                         lines = [ line.replace('\r','') for line in lines ]
 
                     outfile.writelines(lines)
-                except:
-                    message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
-                    log_errors(message)
-                    print(message)
+
             #
         #
     #
