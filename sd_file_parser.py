@@ -1168,7 +1168,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
 
         flt_file = os.path.join(head,tail)
         data = pd.read_csv( flt_file ,index_col=False , usecols=(0,1))
-        data = data.apply(pd.to_numeric,errors='warn')
+        data = data.apply(pd.to_numeric,errors='coerce')
         data = data.values
         msk = np.isnan( data[:,0] )
         for ii in range( 0, data.ndim ):
