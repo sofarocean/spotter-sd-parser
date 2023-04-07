@@ -141,6 +141,14 @@ https://content.sofarocean.com/hubfs/Spotter%20product%20documentation%20page/wa
 
 We encourage a standard [GitHub flow](https://docs.github.com/en/get-started/quickstart/github-flow):  please create a branch, and submit a pull request when ready.  Thanks in advance.
 
+# Testing
+
+We are (at the time of this writing) beginning to write and collect unit tests in tests/ 
+
+To test, the following can be run from the root of the repo:
+
+`% python3 -m unittest tests/*.py`
+
 # License
 
 Apache 2.0.  See [LICENSE](../main/LICENSE)
