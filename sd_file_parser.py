@@ -104,7 +104,7 @@ Output:
                              (decimal degrees)
         displacement.csv  :: Instantaneous displacement from mean location 
                              along north, east and vertical directions(in meter)
-        bulkparameters    :: Bulk wave parameters (Significant wave height, peak peariod, etc.)
+        bulkparameters    :: Bulk wave parameters (Significant wave height, peak period, etc.)
 
      Data is stored as comma delimited file, where each new line corresponds to 
      a new datapoint in time, and the individual columns contain different data
@@ -129,8 +129,9 @@ Output:
     in Hertz, and spectral entries are given in squared meters per Hz (m^2/Hz) or 
     are dimensionless (for the directional moments a1,a2,b1,b2).
 
-    The bulk parameter (bulkparameters.csv) file starts with a header line and subsequent lines contain the bulk
-    parameters calculated at the indicated time
+    The bulk parameter (bulkparameters.csv) file starts with a header line
+    and subsequent lines contain the bulk parameters calculated at the
+    indicated time
 
     HEADER:    # year , month , day, hour ,min, sec, milisec , Significant Wave Height, Mean Period, Peak Period, Mean Direction, Peak Direction, Mean Spreading, Peak Spreading
                2017,11   ,10 ,5   ,3  ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
@@ -138,8 +139,9 @@ Output:
                 |    |    |   |    |   |   |        |     | ,   | , | , |  , |   , |  , |
                2017,12   ,20 ,0   ,6  ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
 
-    For the definitions used to calculate the bulk parameters from the variance density spectra, and a short description
-    please refer to:
+    For the definitions used to calculate the bulk parameters from the
+    variance density spectra, and a short description please refer to:
+
     https://content.sofarocean.com/hubfs/Spotter%20product%20documentation%20page/wave-parameter-definitions.pdf
 
 
@@ -1181,11 +1183,11 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         if ii < 10:
             raise Exception('Roll-over in millis')
 
-        def milis_to_epoch(milis_in):
+        def millis_to_epoch(milis_in):
             return int(epochs[0] + ( milis_in - millis[0] ) \
                    * ( epochs[ii] - epochs[0] ) / ( millis[ii] - millis[0] ))
 
-        return milis_to_epoch
+        return millis_to_epoch
 
     def process_sst_lines( lines, infile ):
         #
@@ -1196,7 +1198,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         max = 4294967295
 
         #Get the millis to epoch mapping from the FLT file
-        milis_to_epoch = get_epoch_to_milis_relation(infile)
+        millis_to_epoch = get_epoch_to_milis_relation(infile)
 
         # Do a line by line processing, replacing millis with epochtime from
         # the mapping
@@ -1224,7 +1226,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     value = previousvalue + delta
 
                     #Convert to epochtime from mapping
-                    epoch = milis_to_epoch( value )
+                    epoch = millis_to_epoch( value )
                     outlines.append(str( epoch ) + ' , ' + data[1])
                     previousvalue = value
                 else:
