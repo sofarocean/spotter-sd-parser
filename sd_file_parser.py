@@ -104,7 +104,7 @@ Output:
                              (decimal degrees)
         displacement.csv  :: Instantaneous displacement from mean location 
                              along north, east and vertical directions(in meter)
-        bulkparameters    :: Bulk wave parameters (Significant wave height, peak peariod, etc.)
+        bulkparameters    :: Bulk wave parameters (Significant wave height, peak period, etc.)
 
      Data is stored as comma delimited file, where each new line corresponds to 
      a new datapoint in time, and the individual columns contain different data
@@ -129,8 +129,9 @@ Output:
     in Hertz, and spectral entries are given in squared meters per Hz (m^2/Hz) or 
     are dimensionless (for the directional moments a1,a2,b1,b2).
 
-    The bulk parameter (bulkparameters.csv) file starts with a header line and subsequent lines contain the bulk
-    parameters calculated at the indicated time
+    The bulk parameter (bulkparameters.csv) file starts with a header line
+    and subsequent lines contain the bulk parameters calculated at the
+    indicated time
 
     HEADER:    # year , month , day, hour ,min, sec, milisec , Significant Wave Height, Mean Period, Peak Period, Mean Direction, Peak Direction, Mean Spreading, Peak Spreading
                2017,11   ,10 ,5   ,3  ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
@@ -138,8 +139,9 @@ Output:
                 |    |    |   |    |   |   |        |     | ,   | , | , |  , |   , |  , |
                2017,12   ,20 ,0   ,6  ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
 
-    For the definitions used to calculate the bulk parameters from the variance density spectra, and a short description
-    please refer to:
+    For the definitions used to calculate the bulk parameters from the
+    variance density spectra, and a short description please refer to:
+
     https://content.sofarocean.com/hubfs/Spotter%20product%20documentation%20page/wave-parameter-definitions.pdf
 
 
@@ -507,7 +509,7 @@ def main( path = None , outpath=None, outputFileType='CSV',
             #
             fileName = os.path.join( outpath , outFiles[suffix] + '.csv' )
             # 
-            # For each filetypem concatenate files to intermediate CSV files...
+            # For each filetype, concatenate files to intermediate CSV files...
 
             print( 'Concatenating all ' + suffix + ' files:')
             if not (cat(path=path, outputFileType='CSV',Suffix=suffix,
@@ -1181,11 +1183,11 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         if ii < 10:
             raise Exception('Roll-over in millis')
 
-        def milis_to_epoch(milis_in):
+        def millis_to_epoch(milis_in):
             return int(epochs[0] + ( milis_in - millis[0] ) \
                    * ( epochs[ii] - epochs[0] ) / ( millis[ii] - millis[0] ))
 
-        return milis_to_epoch
+        return millis_to_epoch
 
     def process_sst_lines( lines, infile ):
         #
@@ -1195,9 +1197,8 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         # the max ints.
         max = 4294967295
 
-
         #Get the millis to epoch mapping from the FLT file
-        milis_to_epoch = get_epoch_to_milis_relation(infile)
+        millis_to_epoch = get_epoch_to_milis_relation(infile)
 
         # Do a line by line processing, replacing millis with epochtime from
         # the mapping
@@ -1205,10 +1206,11 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         previousvalue = 0
         for line in lines:
             if 'millis' in line:
-                outlines.append((line))
+                # header
+                outlines.append(line)
             else:
                 #
-                data  = line.split(',')
+                data = line.strip().split(',')
                 # last line can be empty, check if there are two entries (as expected)
                 if len(data) == 2:
 
@@ -1224,12 +1226,12 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     value = previousvalue + delta
 
                     #Convert to epochtime from mapping
-                    epoch = milis_to_epoch( value )
-
+                    epoch = millis_to_epoch( value )
                     outlines.append(str( epoch ) + ' , ' + data[1])
                     previousvalue = value
-
-
+                else:
+                    # malformed line
+                    pass
 
         return '\n'.join(outlines) + '\n'
 
@@ -1385,11 +1387,16 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
             #
             # Suffix is not 'SPC'
             #
-            with open(os.path.join( path,filename) ) as infile:
+            fqfn = os.path.join(path, filename)
+            with open(fqfn) as infile:
                 #
                 try:
                     lines = infile.readlines()
-
+                except:
+                    message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
+                    log_errors(message)
+                    print(message)
+                else:
                     # if this is the first file of this type, keep the header
                     # otherwise, drop it
 
@@ -1400,8 +1407,8 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     # If SST file, map millis onto epochs
                     if Suffix == 'SST':
                         if compatibility_version < 3:
-                            lines = process_sst_lines(lines, filename)
-                    
+                            lines = process_sst_lines(lines, fqfn)
+
                     if compress:
                         #
                         lines = [ line.encode('utf-8') for line in lines ]
@@ -1410,14 +1417,8 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                         # Strip dos newline char
                         lines = [ line.replace('\r','') for line in lines ]
 
-                    # Drop all lines that don't end with linefeed, 
-                    # to avoid concatenating incomplete data into
-                    # invalid data
-                    outfile.writelines( [ line for line in lines if line.endswith('\n') ] )
-                except:
-                    message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
-                    log_errors(message)
-                    print(message)
+                    outfile.writelines(lines)
+
             #
         #
     #

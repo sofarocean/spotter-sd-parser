@@ -1,3 +1,24 @@
+# ignore parser output in any dir
+displacement.csv
+sst.csv
+Szz.csv
+a1.csv
+b1.csv
+a2.csv
+b2.csv
+Sxx.csv
+Syy.csv
+Qxz.csv
+Qyz.csv
+Cxy.csv
+system.csv
+location.csv
+sst.csv
+bulkparameters.csv
+
+# error output from parser
+error.txt
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
