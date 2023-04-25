@@ -160,8 +160,14 @@ Major Updates:
 # Implementation
 #----------------
 #
-import numpy
+import numpy as np
 import os
+import pandas as pd
+from scipy import signal, io
+import time
+import fnmatch
+import gzip
+import sys
 
 #'SHA <-> version-number' relation
 #(note that duel entry for 1.2.5/1.4.2 is due to update glitches)
@@ -203,7 +209,7 @@ applyPhaseCorrectionFromVersionNumber = 2
 
 class Spectrum:
     _parser_files = {'Szz':'Szz.csv', 'a1':'a1.csv', 'b1':'b1.csv','Sxx':'Sxx.csv','Syy':'Syy.csv','Qxz':'Qxz.csv','Qyz':'Qyz.csv'}
-    _toDeg = 180. / numpy.pi
+    _toDeg = 180. / np.pi
 
     def __init__(self,path,outpath):
 
@@ -230,6 +236,11 @@ class Spectrum:
         self._load_parser_output()
 
     @property
+    def spectral_data_is_available(self):
+        available = [ self._file_available[key] for key in self._file_available ]
+        return any(available)
+
+    @property
     def Szz(self):
         return self._data['Szz']
 
@@ -242,24 +253,19 @@ class Spectrum:
         return self._data['b1']
 
     def _Qyzm(self):
-        import  numpy
-        return numpy.mean( self._data['Qyz'],1 )
+        return np.mean( self._data['Qyz'],1 )
 
     def _Qxzm(self):
-        import  numpy
-        return numpy.mean( self._data['Qxz'],1 )
+        return np.mean( self._data['Qxz'],1 )
 
     def _Sxxm(self):
-        import  numpy
-        return numpy.mean( self._data['Sxx'],1 )
+        return np.mean( self._data['Sxx'],1 )
 
     def _Syym(self):
-        import  numpy
-        return numpy.mean( self._data['Syy'],1 )
+        return np.mean( self._data['Syy'],1 )
 
     def _Szzm(self):
-        import  numpy
-        return numpy.mean( self._data['Szz'],1 )
+        return np.mean( self._data['Szz'],1 )
 
     @property
     def f(self):
@@ -270,7 +276,7 @@ class Spectrum:
             if self._file_available[key]:
                 with open(os.path.join(self.path,self._parser_files[key]),'r') as file:
                     line = file.readline(  ).split(',')[8:]
-                    self._frequencies = numpy.array([float(x) for x in line])
+                    self._frequencies = np.array([float(x) for x in line])
             break
         else:
             raise Exception('No spectral files available - please make sure the script is in the same directory as the sd-card output')
@@ -278,16 +284,14 @@ class Spectrum:
 
     def _load_parser_output( self ):
         #
-        import numpy
-        import os
         for key in self._parser_files:
             if self._file_available[key]:
-                data = numpy.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
+                data = np.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
                 self.time = data[ : , 0:8 ]
                 self._data[key] = data[:,8:]
-                mask = numpy.isnan( self._data[key] )
+                mask = np.isnan( self._data[key] )
                 self._data[key][mask] = 0.
-                self._none = numpy.nan + numpy.zeros( self._data[key].shape )
+                self._none = np.nan + np.zeros( self._data[key].shape )
 
         for key in self._parser_files:
             if not self._file_available[key]:
@@ -295,40 +299,33 @@ class Spectrum:
 
 
     def _moment(self , values ):
-        import numpy
 
-        df = numpy.mean(numpy.diff( self.f))
         E = self.Szz * values
         jstart =3
-        return numpy.trapz(  E[:,jstart:],self.f[jstart:] ,1  )
+        return np.trapz(  E[:,jstart:],self.f[jstart:] ,1  )
 
     def _weighted_moment(self , values ):
-        import numpy
-
         return self._moment( values ) / self._moment(1.)
 
     @property
     def a1m(self):
-        import  numpy
         if self._file_available['Sxx']:
-            return self._Qxzm() / numpy.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
+            return self._Qxzm() / np.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
         else:
             return self._weighted_moment( self.a1 )
 
     @property
     def b1m(self):
         if self._file_available['Sxx']:
-            return self._Qyzm() / numpy.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
+            return self._Qyzm() / np.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
         else:
             return self._weighted_moment( self.b1 )
 
     def _peak_index(self):
-        import numpy
-        return numpy.argmax( self.Szz,1 )
+        return np.argmax( self.Szz,1 )
 
     def _direction(self,a1,b1):
-        import numpy
-        directions = 270 - numpy.arctan2( b1 , a1 ) * self._toDeg
+        directions = 270 - np.arctan2( b1 , a1 ) * self._toDeg
 
         for ii,direction in enumerate(directions):
             if direction < 0:
@@ -343,16 +340,15 @@ class Spectrum:
         return self._direction(self.a1m,self.b1m)
 
     def _spread(self,a1,b1):
-        import numpy
-        return numpy.sqrt(  2 - 2 * numpy.sqrt( a1**2 + b1**2 ) ) * self._toDeg
+        return np.sqrt(  2 - 2 * np.sqrt( a1**2 + b1**2 ) ) * self._toDeg
 
     def mean_spread(self):
         return self._spread(self.a1m,self.b1m )
 
     def _get_peak_value(self, variable ):
-        maxloc = numpy.argmax( self.Szz,1 )
+        maxloc = np.argmax( self.Szz,1 )
 
-        out = numpy.zeros( maxloc.shape )
+        out = np.zeros( maxloc.shape )
 
         if len(variable.shape) == 2:
             for ii,index in enumerate( maxloc ):
@@ -383,11 +379,9 @@ class Spectrum:
         return 1. / self._weighted_moment( self.f )
 
     def significant_wave_height(self):
-        import numpy
-        return 4.*numpy.sqrt(self._moment( 1.))
+        return 4.*np.sqrt(self._moment( 1.))
 
     def generate_text_file(self):
-        import os
         hm0   = self.significant_wave_height()
         tm01  = self.mean_period()
         tp    = self.peak_period()
@@ -419,8 +413,6 @@ def main( path = None , outpath=None, outputFileType='CSV',
     routine is called by __main__ and that calls in succession the separate 
     routines to concatenate, and parse files. 
     """
-    import os
-
 
     #Check the version of Files
     versions =  getVersions( path )
@@ -428,10 +420,9 @@ def main( path = None , outpath=None, outputFileType='CSV',
     #The filetypes to concatenate
     if suffixes is None:
         #
-        suffixes    = ['FLT','SPC','SYS','LOC','GPS','SST']
+        suffixes = ['FLT','SPC','SYS','LOC','GPS','SST','SMD','BARO']
         #
-    
-        
+
     if parsing is None:
         #
         parsing=['FLT','SPC','LOC','SST']
@@ -439,7 +430,8 @@ def main( path = None , outpath=None, outputFileType='CSV',
     #
         
     outFiles    = {'FLT':'displacement','SPC':'spectra','SYS':'system',
-                       'LOC':'location','GPS':'gps','SST':'sst'}
+                   'LOC':'location','GPS':'gps','SST':'sst','SMD':'smartmooring_data',
+                   'BARO':'barometer'}
 
     if path is None:
         #
@@ -558,7 +550,8 @@ def main( path = None , outpath=None, outputFileType='CSV',
         # Generate bulk parameter file
         if bulkParameters:
             spectrum = Spectrum(path=outpath,outpath=outpath)
-            spectrum.generate_text_file()
+            if spectra.spectral_data_is_available:
+                spectrum.generate_text_file()
     #Versions
     #
 
@@ -585,11 +578,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     a Spotter into one datastructure and saves the result as a CSV file 
     (*outputFileName*).
     """
-
-    import os
-    import pandas as pd
-    import numpy as np
-    import time
     #
 
     fname,ext = os.path.splitext(outputFileName)
@@ -692,9 +680,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
     #
 
-    
-
-
     if outputFileType.lower() in ['csv','gz']:
         #
         np.savetxt(outputFileName ,
@@ -707,17 +692,15 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         # To save to matlab .mat format we need scipy
         #
         try:
-            import scipy
-            from scipy import io                
             #
             if kind=='FLT':
-                scipy.io.savemat( outputFileName ,
+                io.savemat( outputFileName ,
                     {'x':data[:,7].astype(np.float32),
                      'y':data[:,8].astype(np.float32),
                      'z':data[:,9].astype(np.float32),
                   'time':data[:,0:7].astype(np.int16)} )
             elif kind=='GPS':
-                scipy.io.savemat( outputFileName ,
+                io.savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
                      'Lon':data[:,8].astype(np.float32),
                      'elevation':data[:,9].astype(np.float32),
@@ -726,7 +709,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
                      'w':data[:,12].astype(np.float32),                     
                      'time':data[:,0:7].astype(np.int16)} )                
             else:
-                scipy.io.savemat( outputFileName ,
+                io.savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
                      'Lon':data[:,8].astype(np.float32),
                   'time':data[:,0:7].astype(np.int16)} )                
@@ -762,8 +745,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
 
 def epochToDateArray( epochtime ):
     #
-    import numpy as np
-    import time
     
     datetime   = np.array( [ list(time.gmtime(x))[0:6] for x in epochtime ])
     milis      = np.array( [ ( 1000 * (  x-np.floor(x) ) ) for x in epochtime ])
@@ -783,10 +764,6 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
     # a Spotter into one datastructure and saves the result as a CSV file
     # (*outputFileName*).
     #
-    import os
-    import pandas as pd
-    import numpy as np
-    import time
     
     def checkKeyNames(key,errorLocation):
         # Nested function to make sure input is insensitive to capitals,
@@ -993,11 +970,9 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
             # To save to matlab .mat format we need scipy
             #
             try:
-                import scipy
-                from scipy import io                
                 #
                 mat = data[key]
-                scipy.io.savemat(
+                io.savemat(
                         os.path.join( outputPath , outputFileName[key]),
                         {'spec':mat[:,8:].astype(np.float32),
                         'time':mat[:,0:7].astype(np.int16),
@@ -1028,8 +1003,7 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
 def lowFrequencyFilter( data ):
     '''
     function to perform the low-frequency filter
-    '''   
-    import numpy as np
+    '''
     #
     with np.errstate(invalid='ignore',divide='ignore'):
         # Ignore division by 0 etc (this is caught below)
@@ -1062,8 +1036,6 @@ def getFileNames( path , suffix , message,versionFileList=None ):
     # This function returns all the filenames in a given *path*
     # that conform to ????_YYY.CSV where YYY is given by *suffix*.
     #
-    import os
-    import fnmatch
     
     if path is None:
         #
@@ -1153,9 +1125,6 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
     processing is done. Specifically, for SST files we map the millis timebase
     onto the epochtime base using a relation estimated from the FLT files.
     """
-    import os
-    import pandas as pd
-    import numpy as np
 
     def get_epoch_to_milis_relation( sst_file ):
         #
@@ -1178,7 +1147,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         millis = data[:,0]
         epochs = data[:,1]
 
-        ii  = numpy.argmax( millis)
+        ii  = np.argmax( millis)
 
         if ii < 10:
             raise Exception('Roll-over in millis')
@@ -1234,9 +1203,6 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     pass
 
         return '\n'.join(outlines) + '\n'
-
-    import os
-    import gzip
     #
 
     def modeDetection( path , filename ):
@@ -1244,7 +1210,6 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         # Here we detect if we are in debug or in production mode, we do this
         # based on the first few lines; in debug these will contain either
         # FFT or SPEC, whereas in production only SPECA is encountered
-        import os
         
         mode = 'production'
         with open(os.path.join( path,filename) ) as infile:
@@ -1430,7 +1395,6 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
     
 def validCommandLineArgument( arg ):
     #
-    import sys
     out = arg.split('=')
 
     if not (len(out) == 2):
@@ -1476,8 +1440,6 @@ def getVersions( path ):
      is a dict that contains all file prefixes (0009 etc.) that can be
      processed in the same way (this may go across firmware versions).
     """
-    
-    import os
 
     # Get sys files
     path,fileNames = getFileNames( path , 'SYS' , 'system' )
@@ -1497,6 +1459,18 @@ def getVersions( path ):
         #
     #end def
     #
+    if len(fileNames) == 0:
+        sha = latestVersion()
+        IIRWeightType = defaultIIRWeightType
+        return  [
+            {'sha':[sha],
+            'version': [supportedVersions[sha]],
+            'ordinal': [ordinalVersionNumber[sha]],
+            'number': ordinalVersionNumber[sha][1],
+            'IIRWeightType': IIRWeightType,
+            'fileNumbers': []}
+        ]
+
     first = True
     version = []
     #
@@ -1611,7 +1585,6 @@ def getVersions( path ):
 #
 def filterSOS(versionNumber,IIRWeightType):
     #
-    import numpy as np
     #second order-sections coeficients of the filter
 
     if versionNumber < 1:
@@ -1665,8 +1638,6 @@ def filterSOS(versionNumber,IIRWeightType):
     return sos
             
 def applyfilter( data , kind , versionNumber, IIRWeightType ):
-    import numpy as np
-    from scipy import signal
     #
     # Apply forward/backward/filtfilt sos filter
     #
@@ -1707,7 +1678,6 @@ if __name__ == "__main__":
     #
     # execute only if run as a script
     #
-    import sys
 
     narg      = len( sys.argv[1:] )
     
