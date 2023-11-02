@@ -160,6 +160,7 @@ Major Updates:
 # Implementation
 #----------------
 #
+import inspect
 import numpy
 import os
 
@@ -1440,34 +1441,19 @@ def validCommandLineArgument( arg ):
         #
     key,val = out
     
-    if key.lower() in ['path']:
-        #
-        key = 'path'
-        #
-    elif  key.lower() in ['outputfiletype']:
-        #
-        key = 'outputFileType'
-        #
-    elif key.lower() in ['spectra']:
-        #
-        key = 'spectra'
-        #
-    elif key.lower() in ['lffilter']:
-        #
-        key = 'lfFilter'
-        #
-    elif key.lower() in ['bulkparameters']:
-        #
-        key = 'bulkParameters'
-        #
+    # normalize arg names to the capitalization required by main()
+    argnames = list(inspect.signature(main).parameters)
+    for argname in argnames:
+        if key.lower() == argname.lower():
+            key = argname
+            break
     else:
         #
         print('ERROR: unknown commandline argument ' + key)
-        sys.exit()
+        sys.exit(1)
         #
     return( key,val)
     #
-
 def getVersions( path ):
     """
      This function retrieves sha from sys filenames; if no sha is present
