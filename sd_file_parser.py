@@ -1437,7 +1437,7 @@ def validCommandLineArgument( arg ):
     if not (len(out) == 2):
         #
         print('ERROR: Unknown commandline argument: ' + arg)
-        sys.exit()
+        sys.exit(1)
         #
     key,val = out
     
