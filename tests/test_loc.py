@@ -16,6 +16,8 @@ from sd_file_parser import parseLocationFiles
 class LocationParsingTest(unittest.TestCase):
 
     def testBasicParserRun(self):
+        if os.path.exists("displacement.csv"):
+            os.remove("displacement.csv")
         parseLocationFiles( inputFileName = self.inputfn, kind='LOC', outputFileName=self.outputfn )
         self.assertTrue( os.path.exists( self.outputfn ) ) 
         self.assertFalse( os.path.exists( 'displacement.csv' ) )
