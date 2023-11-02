@@ -39,7 +39,7 @@ class SSTParsingTest(unittest.TestCase):
         prepare for running the parser
         """
         self.inputfn = 'example_data/2021-01-15/0235_SST.CSV'
-        self.outputfn = 'sst.CSV'
+        self.outputfn = 'sst.csv'
         
     def tearDown(self):
         """
