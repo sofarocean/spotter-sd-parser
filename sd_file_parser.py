@@ -1143,7 +1143,9 @@ def extensions( outputFileType ):
         #
     #
 #
-  
+class missingFLTFile(Exception):
+    pass
+
 def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
              reportProgress=True, outputFileType='CSV',versionFileList=None,
             compatibility_version=defaultVersion):
@@ -1167,6 +1169,9 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         tail = tail.replace('SST','FLT')
 
         flt_file = os.path.join(head,tail)
+        if os.path.exists( flt_file ) == False:
+            raise missingFLTFile('No FLT file found for SST file')
+
         data = pd.read_csv( flt_file ,index_col=False , usecols=(0,1))
         data = data.apply(pd.to_numeric,errors='coerce')
         data = data.values
@@ -1407,7 +1412,13 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                     # If SST file, map millis onto epochs
                     if Suffix == 'SST':
                         if compatibility_version < 3:
-                            lines = process_sst_lines(lines, fqfn)
+                            try:
+                                lines = process_sst_lines(lines, fqfn)
+                            except missingFLTFile:
+                                message = "- ERROR:, no FLT file found for SST file " + fqfn + " - skipping"
+                                log_errors(message)
+                                print(message)
+                                continue
 
                     if compress:
                         #
