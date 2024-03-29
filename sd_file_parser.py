@@ -283,6 +283,12 @@ class Spectrum:
         for key in self._parser_files:
             if self._file_available[key]:
                 data = numpy.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
+
+                if data.ndim == 1:
+                    # If there is only 1 line in the file, we need to add a dimension to the data as numpy returns a
+                    # 1D array in this case.
+                    data = data[None,:]
+
                 self.time = data[ : , 0:8 ]
                 self._data[key] = data[:,8:]
                 mask = numpy.isnan( self._data[key] )
