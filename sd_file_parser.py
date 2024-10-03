@@ -37,10 +37,10 @@ Purpose:
     ............   |
     000N_FLT.CSV  -|
 
-    and similarly for spectral ( xxxx_SPC.CSV => Szz.csv) and location 
+    and similarly for spectral ( xxxx_SPC.CSV => Szz.csv) and location
     (xxxx_LOC.CSV => location.csv) files. Further, after all spectral files have
-    been combined. Bulk parameters (significant wave height, peak periodm etc.) are calculated from the spectral files,
-    and stored seperately in bulkparameters.csv
+    been combined. Bulk parameters (significant wave height, peak period, etc.)
+    are calculated from the spectral files, and stored separately in bulkparameters.csv
 
     NOTE: the original data files will remain unchanged.
 
@@ -202,12 +202,18 @@ applyPhaseCorrectionFromVersionNumber = 2
     
 
 class Spectrum:
-    _parser_files = {'Szz':'Szz.csv', 'a1':'a1.csv', 'b1':'b1.csv','Sxx':'Sxx.csv','Syy':'Syy.csv','Qxz':'Qxz.csv','Qyz':'Qyz.csv'}
+    _parser_files = {
+        'Szz':  'Szz.csv',
+        'a1':   'a1.csv',
+        'b1':   'b1.csv',
+        'Sxx':  'Sxx.csv',
+        'Syy':  'Syy.csv',
+        'Qxz':  'Qxz.csv',
+        'Qyz':  'Qyz.csv'
+    }
     _toDeg = 180. / numpy.pi
 
     def __init__(self,path,outpath):
-
-
         self._file_available = {'Szz':False, 'a1':False, 'b1':False,}
         self.path = path
         self.outpath = outpath
@@ -538,7 +544,7 @@ def main( path = None , outpath=None, outputFileType='CSV',
                     #parse the mean location/displacement files; 
                     #this step transforms unix epoch to date string.
                     #
-                    parseLocationFiles(inputFileName = fileName,kind=suffix,
+                    parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
                             outputFileType=outputFileType,
                             versionNumber=version['number'],
@@ -600,7 +606,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
 
     fname,ext = os.path.splitext(outputFileName)
     outputFileName = fname + '.' + extensions(outputFileType)
-    
 
     #
     # Load location data into a pandas dataframe object
@@ -683,7 +688,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         data = pd.read_csv( inputFileName ,
                 index_col=False , usecols=(0,1,2,3,4))
         data = data.apply(pd.to_numeric,errors='coerce')
-        data = data.values
+        data = data.values.astype(np.float64)
         msk = np.isnan(data[:, 0])
         data = data[~msk, :]
         datetime    = epochToDateArray(data[:,0].tolist())
