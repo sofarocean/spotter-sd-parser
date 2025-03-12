@@ -160,11 +160,13 @@ Major Updates:
 # Implementation
 #----------------
 #
-import numpy
 import os
+import sys
+
+import numpy
 
 #'SHA <-> version-number' relation
-#(note that duel entry for 1.2.5/1.4.2 is due to update glitches)
+#(note that dual entry for 1.2.5/1.4.2 is due to update glitches)
 supportedVersions    = {'1446ABC':'1.2.5','9BEADBE':'1.3.0','2FDC90':'1.4.1',
                         '928D2AE':'1.2.5','3D3CFF5':'1.?.?','A0F6980':'1.?.?',
                         '340b03f':'1.4.2','82755AE':'1.4.2','B218FBD':'1.5.1',
@@ -446,9 +448,11 @@ def main( path = None , outpath=None, outputFileType='CSV',
     if any( [ version['number'] < 3 for version in versions ] ):
         print("WARNING: This parser version no longer supports legacy SST files (firmware 1.12.x and below).")
         print("         If you need to parse legacy SST files, please use the parser in the legacy/ subdirectory.")
-        print("Press enter to confirm:")
-        input()
+        print("Press enter to confirm (or q to quit):")
         log_errors("Warned about skipping legacy SST parsing.")
+        answer = input()
+        if answer.lower() == 'q':
+            sys.exit(1)
         for collection in suffixes, parsing:
             collection.remove('SST')
 
@@ -619,7 +623,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     # Load location data into a pandas dataframe object
     if reportProgress:
         #
-        print(f"Processing Spotter displacement output - {kind}")
+        print(f"Processing Spotter output - {kind}")
         #
     #        
 
@@ -1312,41 +1316,38 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
             fqfn = os.path.join(path, filename)
             with open(fqfn) as infile:
                 #
+                line_num = 0
                 try:
-                    lines = infile.readlines()
-                except:
-                    message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
-                    log_errors(message)
-                    print(message)
-                else:
-                    # if this is the first file of this type, keep the header
-                    # otherwise, drop it
-
-                    if index > 0 and len(lines):
-                        unused_header = lines.pop(0)
-
-                    if compress:
-                        #
-                        lines = [ line.encode('utf-8') for line in lines ]
-                        #
-                    else:
-                        # Strip dos newline char
-                        lines = [ line.replace('\r','') for line in lines ]
-
-                    outfile.writelines(lines)
-
-            #
-        #
-    #
+                    for line in infile:
+                        line_num += 1
+                        # skip any file that doesn't end with '\n'
+                        # https://docs.python.org/3/tutorial/inputoutput.html#methods-of-file-objects
+                        if not line.endswith('\n'):
+                            log_errors(f"DEBUG: cat(): not SPC: skipping line {line_num} of file {filename}")
+                            continue
+                        # if this is the first file of this type, keep the header
+                        # otherwise, drop it
+                        if index > 0 and line_num == 1:
+                            continue
+                        if compress:
+                            line = line.encode('utf-8')
+                        else:
+                            # Strip dos newline char
+                            line = line.replace('\r', '')
+                        outfile.write(line)
+                except UnicodeDecodeError as e:
+                    print(f"WARNING: likely corrupt line near line number {line_num} in {fqfn}, continuing: {e}")
+                    continue
+                # end try
+            # end with
+        # end if
     outfile.close()
     return True
-    #
 #end def
 
     
 def validCommandLineArgument( arg ):
     #
-    import sys
     out = arg.split('=')
 
     if not (len(out) == 2):
@@ -1621,8 +1622,6 @@ if __name__ == "__main__":
     #
     # execute only if run as a script
     #
-    import sys
-
     narg      = len( sys.argv[1:] )
     
     if narg>0:
