@@ -544,11 +544,15 @@ def main( path = None , outpath=None, outputFileType='CSV',
                     #parse the mean location/displacement files; 
                     #this step transforms unix epoch to date string.
                     #
-                    parseLocationFiles(inputFileName = fileName, kind=suffix,
+                    try:
+                        parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
                             outputFileType=outputFileType,
                             versionNumber=version['number'],
                             IIRWeightType=version['IIRWeightType'])
+                    except OSError as e:
+                        print(f"Error in parseLocationFiles() while parsing {fileName}: {e}")
+                        raise
                     #
                 elif suffix in ['SPC']:
                     #
