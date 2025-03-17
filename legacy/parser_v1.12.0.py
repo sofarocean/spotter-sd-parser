@@ -578,8 +578,12 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         # Read the data using pandas, and convert to numpy
         #
-        data = pd.read_csv( inputFileName ,
-                index_col=False , usecols=(1,2,3,4),error_bad_lines=False)
+        data = pd.read_csv(
+            inputFileName,
+            index_col=False,
+            usecols=(1,2,3,4),
+            on_bad_lines="skip",
+        )
         data = data.apply(pd.to_numeric,errors='coerce')
         data = data.values
 
