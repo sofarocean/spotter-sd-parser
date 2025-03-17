@@ -160,11 +160,13 @@ Major Updates:
 # Implementation
 #----------------
 #
-import numpy
 import os
+import sys
+
+import numpy
 
 #'SHA <-> version-number' relation
-#(note that duel entry for 1.2.5/1.4.2 is due to update glitches)
+#(note that dual entry for 1.2.5/1.4.2 is due to update glitches)
 supportedVersions    = {'1446ABC':'1.2.5','9BEADBE':'1.3.0','2FDC90':'1.4.1',
                         '928D2AE':'1.2.5','3D3CFF5':'1.?.?','A0F6980':'1.?.?',
                         '340b03f':'1.4.2','82755AE':'1.4.2','B218FBD':'1.5.1',
@@ -284,8 +286,6 @@ class Spectrum:
 
     def _load_parser_output( self ):
         #
-        import numpy
-        import os
         for key in self._parser_files:
             if self._file_available[key]:
                 data = numpy.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
@@ -307,16 +307,12 @@ class Spectrum:
 
 
     def _moment(self , values ):
-        import numpy
-
         df = numpy.mean(numpy.diff( self.f))
         E = self.Szz * values
         jstart =3
         return numpy.trapz(  E[:,jstart:],self.f[jstart:] ,1  )
 
     def _weighted_moment(self , values ):
-        import numpy
-
         return self._moment( values ) / self._moment(1.)
 
     @property
@@ -335,11 +331,9 @@ class Spectrum:
             return self._weighted_moment( self.b1 )
 
     def _peak_index(self):
-        import numpy
         return numpy.argmax( self.Szz,1 )
 
     def _direction(self,a1,b1):
-        import numpy
         directions = 270 - numpy.arctan2( b1 , a1 ) * self._toDeg
 
         for ii,direction in enumerate(directions):
@@ -355,7 +349,6 @@ class Spectrum:
         return self._direction(self.a1m,self.b1m)
 
     def _spread(self,a1,b1):
-        import numpy
         return numpy.sqrt(  2 - 2 * numpy.sqrt( a1**2 + b1**2 ) ) * self._toDeg
 
     def mean_spread(self):
@@ -395,11 +388,9 @@ class Spectrum:
         return 1. / self._weighted_moment( self.f )
 
     def significant_wave_height(self):
-        import numpy
         return 4.*numpy.sqrt(self._moment( 1.))
 
     def generate_text_file(self):
-        import os
         hm0   = self.significant_wave_height()
         tm01  = self.mean_period()
         tp    = self.peak_period()
@@ -431,25 +422,40 @@ def main( path = None , outpath=None, outputFileType='CSV',
     routine is called by __main__ and that calls in succession the separate 
     routines to concatenate, and parse files. 
     """
-    import os
-
 
     #Check the version of Files
     versions =  getVersions( path )
-    
+
     #The filetypes to concatenate
     if suffixes is None:
-        #
-        suffixes    = ['FLT','SPC','SYS','LOC','GPS','SST']
-        #
-    
-        
+        suffixes = [
+            'FLT',
+            'SPC',
+            'SYS',
+            'LOC',
+            'GPS',
+            'SST',
+        ]
+
     if parsing is None:
-        #
-        parsing=['FLT','SPC','LOC','SST']
-        #
-    #
-        
+        parsing = [
+            'FLT',
+            'SPC',
+            'LOC',
+            'SST',
+        ]
+
+    if any( [ version['number'] < 3 for version in versions ] ):
+        print("WARNING: This parser version no longer supports legacy SST files (firmware 1.12.x and below).")
+        print("         If you need to parse legacy SST files, please use the parser in the legacy/ subdirectory.")
+        print("Press enter to confirm (or q to quit):")
+        log_errors("Warned about skipping legacy SST parsing.")
+        answer = input()
+        if answer.lower() == 'q':
+            sys.exit(1)
+        for collection in suffixes, parsing:
+            collection.remove('SST')
+
     outFiles    = {'FLT':'displacement','SPC':'spectra','SYS':'system',
                        'LOC':'location','GPS':'gps','SST':'sst'}
 
@@ -489,7 +495,7 @@ def main( path = None , outpath=None, outputFileType='CSV',
     if len(versions) == 1:
         # if there is only a single version- we allow all files to be parsed.
         # this is a clutch to account for the fact that sys files are not
-        # garantueed to be written. In general assuming everything is the
+        # guaranteed to be written. In general assuming everything is the
         # same version seems safe- allowing to parse multiple different
         # versions is perhaps something we want to stop supporting as it adds
         # a lot of fragile logic.
@@ -516,8 +522,8 @@ def main( path = None , outpath=None, outputFileType='CSV',
             os.makedirs(outpath)
             #
         #            
-        
-        for suffix  in suffixes:
+
+        for suffix in suffixes:
             #
             fileName = os.path.join( outpath , outFiles[suffix] + '.csv' )
             # 
@@ -539,16 +545,25 @@ def main( path = None , outpath=None, outputFileType='CSV',
             #
             if suffix in parsing:
                 #
-                if suffix in ['FLT','LOC','GPS','SST']:
+                if suffix in [
+                    'FLT',
+                    'LOC',
+                    'GPS',
+                    'SST',
+                ]:
                     #
                     #parse the mean location/displacement files; 
                     #this step transforms unix epoch to date string.
                     #
-                    parseLocationFiles(inputFileName = fileName, kind=suffix,
+                    try:
+                        parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
                             outputFileType=outputFileType,
                             versionNumber=version['number'],
                             IIRWeightType=version['IIRWeightType'])
+                    except OSError as e:
+                        print(f"Error in parseLocationFiles() while parsing {fileName}: {e}")
+                        raise
                     #
                 elif suffix in ['SPC']:
                     #
@@ -573,9 +588,9 @@ def main( path = None , outpath=None, outputFileType='CSV',
             spectrum.generate_text_file()
     #Versions
     #
+    print("Done.")
 
 #end def
-
 
 
 def log_errors( error ):
@@ -597,11 +612,8 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     a Spotter into one datastructure and saves the result as a CSV file 
     (*outputFileName*).
     """
-
-    import os
     import pandas as pd
     import numpy as np
-    import time
     #
 
     fname,ext = os.path.splitext(outputFileName)
@@ -611,7 +623,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     # Load location data into a pandas dataframe object
     if reportProgress:
         #
-        print(f"Processing Spotter displacement output - {kind}")
+        print(f"Processing Spotter output - {kind}")
         #
     #        
 
@@ -703,9 +715,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
     #
 
-    
-
-
     if outputFileType.lower() in ['csv','gz']:
         #
         np.savetxt(outputFileName ,
@@ -794,11 +803,9 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
     # a Spotter into one datastructure and saves the result as a CSV file
     # (*outputFileName*).
     #
-    import os
     import pandas as pd
     import numpy as np
-    import time
-    
+
     def checkKeyNames(key,errorLocation):
         # Nested function to make sure input is insensitive to capitals,
         # irrelevant permutations (Cxz vs Czx), etc
@@ -910,7 +917,7 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
     #
     # Read csv file using Pandas - this is the only section in the code
     # still reliant on Pandas, and only there due to supposed performance
-    # benifits.
+    # benefits.
     tmp = pd.read_csv( inputFileName ,
                 index_col=False , skiprows=[0],  header=None,
                     usecols=tuple(range(2,5+stride*nf)) )
@@ -1073,7 +1080,6 @@ def getFileNames( path , suffix , message,versionFileList=None ):
     # This function returns all the filenames in a given *path*
     # that conform to ????_YYY.CSV where YYY is given by *suffix*.
     #
-    import os
     import fnmatch
     
     if path is None:
@@ -1162,96 +1168,9 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
             compatibility_version=defaultVersion):
     """
     This functions concatenates raw csv files with a header. Only for the first 
-    file it retains the header. Note that for SPEC files and SST files special
-    processing is done. Specifically, for SST files we map the millis timebase
-    onto the epochtime base using a relation estimated from the FLT files.
+    file it retains the header. Note that for SPEC files special
+    processing is done.
     """
-    import os
-    import pandas as pd
-    import numpy as np
-
-    def get_epoch_to_milis_relation( sst_file ):
-        #
-        # This function gets the relation between milis and epoch from the
-        # FLT file. This assumes FLT exist, otherwise we get an error
-        #
-
-        head,tail = os.path.split( sst_file )
-        tail = tail.replace('SST','FLT')
-
-        flt_file = os.path.join(head,tail)
-        if os.path.exists( flt_file ) == False:
-            raise missingFLTFile('No FLT file found for SST file')
-
-        data = pd.read_csv( flt_file ,index_col=False , usecols=(0,1))
-        data = data.apply(pd.to_numeric,errors='coerce')
-        data = data.values
-        msk = np.isnan( data[:,0] )
-        for ii in range( 0, data.ndim ):
-            msk = np.isfinite(data[:,ii])
-            data = data[msk,:]
-        data = data[msk,:]
-        millis = data[:,0]
-        epochs = data[:,1]
-
-        ii  = numpy.argmax( millis)
-
-        if ii < 10:
-            raise Exception('Roll-over in millis')
-
-        def millis_to_epoch(milis_in):
-            return int(epochs[0] + ( milis_in - millis[0] ) \
-                   * ( epochs[ii] - epochs[0] ) / ( millis[ii] - millis[0] ))
-
-        return millis_to_epoch
-
-    def process_sst_lines( lines, infile ):
-        #
-        # Get the function that maps milis to epochs
-        #
-        # max int used for roll-over; Spotter millis clock resets after reaching
-        # the max ints.
-        max = 4294967295
-
-        #Get the millis to epoch mapping from the FLT file
-        millis_to_epoch = get_epoch_to_milis_relation(infile)
-
-        # Do a line by line processing, replacing millis with epochtime from
-        # the mapping
-        outlines = []                #Store the output lines
-        previousvalue = 0
-        for line in lines:
-            if 'millis' in line:
-                # header
-                outlines.append(line)
-            else:
-                #
-                data = line.strip().split(',')
-                # last line can be empty, check if there are two entries (as expected)
-                if len(data) == 2:
-
-                    # Look at the delta, millis should be monotonically increasing
-                    # unless we hit roll-over
-                    delta = int(data[0]) - previousvalue
-
-                    # If the delta is negative, wrap the value
-                    if delta < -4294000000:
-                        delta = delta + max
-
-                    # New value from (potentially) corrected delta
-                    value = previousvalue + delta
-
-                    #Convert to epochtime from mapping
-                    epoch = millis_to_epoch( value )
-                    outlines.append(str( epoch ) + ' , ' + data[1])
-                    previousvalue = value
-                else:
-                    # malformed line
-                    pass
-
-        return '\n'.join(outlines) + '\n'
-
-    import os
     import gzip
     #
 
@@ -1260,8 +1179,6 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
         # Here we detect if we are in debug or in production mode, we do this
         # based on the first few lines; in debug these will contain either
         # FFT or SPEC, whereas in production only SPECA is encountered
-        import os
-        
         mode = 'production'
         with open(os.path.join( path,filename) ) as infile:
             #
@@ -1279,7 +1196,7 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
     
     def find_nth(haystack, needle, n):
         #
-        # Function to find nth and nth-1 occurences of a needle in the haystack
+        # Function to find nth and nth-1 occurrences of a needle in the haystack
         #
         start = haystack.find(needle)
         prev  = start
@@ -1299,20 +1216,13 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
                         message='_'+Suffix,versionFileList=versionFileList )
     #
     if len(fileNames) == 0:
-        return(False)
+        return False
     
     fname,ext = os.path.splitext(outputFileName)
     outputFileName = fname + '.' + extensions(outputFileType)
     #
-    if outputFileType.lower()=='gz':
-        #
-        compress=True
-        #
-    else:
-        #
-        compress=False
-        #    
-    #
+    compress = outputFileType.lower()=='gz'
+
     if compress:
         #
         outfile = gzip.open(outputFileName,'wb')
@@ -1406,53 +1316,38 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
             fqfn = os.path.join(path, filename)
             with open(fqfn) as infile:
                 #
+                line_num = 0
                 try:
-                    lines = infile.readlines()
-                except:
-                    message = "- ERROR:, file " + os.path.join( path,filename) + " is corrupt"
-                    log_errors(message)
-                    print(message)
-                else:
-                    # if this is the first file of this type, keep the header
-                    # otherwise, drop it
-
-                    if index > 0 and len(lines):
-                        unused_header = lines.pop(0)
-                        
-                    #
-                    # If SST file, map millis onto epochs
-                    if Suffix == 'SST':
-                        if compatibility_version < 3:
-                            try:
-                                lines = process_sst_lines(lines, fqfn)
-                            except missingFLTFile:
-                                message = "- ERROR:, no FLT file found for SST file " + fqfn + " - skipping"
-                                log_errors(message)
-                                print(message)
-                                continue
-
-                    if compress:
-                        #
-                        lines = [ line.encode('utf-8') for line in lines ]
-                        #
-                    else:
-                        # Strip dos newline char
-                        lines = [ line.replace('\r','') for line in lines ]
-
-                    outfile.writelines(lines)
-
-            #
-        #
-    #
+                    for line in infile:
+                        line_num += 1
+                        # skip any file that doesn't end with '\n'
+                        # https://docs.python.org/3/tutorial/inputoutput.html#methods-of-file-objects
+                        if not line.endswith('\n'):
+                            log_errors(f"DEBUG: cat(): not SPC: skipping line {line_num} of file {filename}")
+                            continue
+                        # if this is the first file of this type, keep the header
+                        # otherwise, drop it
+                        if index > 0 and line_num == 1:
+                            continue
+                        if compress:
+                            line = line.encode('utf-8')
+                        else:
+                            # Strip dos newline char
+                            line = line.replace('\r', '')
+                        outfile.write(line)
+                except UnicodeDecodeError as e:
+                    print(f"WARNING: likely corrupt line near line number {line_num} in {fqfn}, continuing: {e}")
+                    continue
+                # end try
+            # end with
+        # end if
     outfile.close()
-    return( True )
-    #
+    return True
 #end def
 
     
 def validCommandLineArgument( arg ):
     #
-    import sys
     out = arg.split('=')
 
     if not (len(out) == 2):
@@ -1499,8 +1394,6 @@ def getVersions( path ):
      processed in the same way (this may go across firmware versions).
     """
     
-    import os
-
     # Get sys files
     path,fileNames = getFileNames( path , 'SYS' , 'system' )
     #
@@ -1729,8 +1622,6 @@ if __name__ == "__main__":
     #
     # execute only if run as a script
     #
-    import sys
-
     narg      = len( sys.argv[1:] )
     
     if narg>0:
