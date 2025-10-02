@@ -163,9 +163,11 @@ Major Updates:
 import os
 import sys
 import argparse
+import time
 
-import numpy
-
+import numpy as np
+import pandas as pd
+from scipy import signal
 #'SHA <-> version-number' relation
 #(note that dual entry for 1.2.5/1.4.2 is due to update glitches)
 supportedVersions    = {'1446ABC':'1.2.5','9BEADBE':'1.3.0','2FDC90':'1.4.1',
@@ -214,7 +216,7 @@ class Spectrum:
         'Qxz':  'Qxz.csv',
         'Qyz':  'Qyz.csv'
     }
-    _toDeg = 180. / numpy.pi
+    _toDeg = 180. / np.pi
 
     def __init__(self,path,outpath):
         self._file_available = {'Szz':False, 'a1':False, 'b1':False,}
@@ -251,24 +253,19 @@ class Spectrum:
         return self._data['b1']
 
     def _Qyzm(self):
-        import  numpy
-        return numpy.mean( self._data['Qyz'],1 )
+        return np.mean( self._data['Qyz'],1 )
 
     def _Qxzm(self):
-        import  numpy
-        return numpy.mean( self._data['Qxz'],1 )
+        return np.mean( self._data['Qxz'],1 )
 
     def _Sxxm(self):
-        import  numpy
-        return numpy.mean( self._data['Sxx'],1 )
+        return np.mean( self._data['Sxx'],1 )
 
     def _Syym(self):
-        import  numpy
-        return numpy.mean( self._data['Syy'],1 )
+        return np.mean( self._data['Syy'],1 )
 
     def _Szzm(self):
-        import  numpy
-        return numpy.mean( self._data['Szz'],1 )
+        return np.mean( self._data['Szz'],1 )
 
     @property
     def f(self):
@@ -279,7 +276,7 @@ class Spectrum:
             if self._file_available[key]:
                 with open(os.path.join(self.path,self._parser_files[key]),'r') as file:
                     line = file.readline(  ).split(',')[8:]
-                    self._frequencies = numpy.array([float(x) for x in line])
+                    self._frequencies = np.array([float(x) for x in line])
             break
         else:
             raise Exception('No spectral files available - please make sure the script is in the same directory as the sd-card output')
@@ -289,7 +286,7 @@ class Spectrum:
         #
         for key in self._parser_files:
             if self._file_available[key]:
-                data = numpy.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
+                data = np.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
 
                 if data.ndim == 1:
                     # If there is only 1 line in the file, we need to add a dimension to the data as numpy returns a
@@ -298,9 +295,9 @@ class Spectrum:
 
                 self.time = data[ : , 0:8 ]
                 self._data[key] = data[:,8:]
-                mask = numpy.isnan( self._data[key] )
+                mask = np.isnan( self._data[key] )
                 self._data[key][mask] = 0.
-                self._none = numpy.nan + numpy.zeros( self._data[key].shape )
+                self._none = np.nan + np.zeros( self._data[key].shape )
 
         for key in self._parser_files:
             if not self._file_available[key]:
@@ -308,34 +305,33 @@ class Spectrum:
 
 
     def _moment(self , values ):
-        df = numpy.mean(numpy.diff( self.f))
+        df = np.mean(np.diff( self.f))
         E = self.Szz * values
         jstart =3
-        return numpy.trapz(  E[:,jstart:],self.f[jstart:] ,1  )
+        return np.trapz(  E[:,jstart:],self.f[jstart:] ,1  )
 
     def _weighted_moment(self , values ):
         return self._moment( values ) / self._moment(1.)
 
     @property
     def a1m(self):
-        import  numpy
         if self._file_available['Sxx']:
-            return self._Qxzm() / numpy.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
+            return self._Qxzm() / np.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
         else:
             return self._weighted_moment( self.a1 )
 
     @property
     def b1m(self):
         if self._file_available['Sxx']:
-            return self._Qyzm() / numpy.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
+            return self._Qyzm() / np.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
         else:
             return self._weighted_moment( self.b1 )
 
     def _peak_index(self):
-        return numpy.argmax( self.Szz,1 )
+        return np.argmax( self.Szz,1 )
 
     def _direction(self,a1,b1):
-        directions = 270 - numpy.arctan2( b1 , a1 ) * self._toDeg
+        directions = 270 - np.arctan2( b1 , a1 ) * self._toDeg
 
         for ii,direction in enumerate(directions):
             if direction < 0:
@@ -350,15 +346,15 @@ class Spectrum:
         return self._direction(self.a1m,self.b1m)
 
     def _spread(self,a1,b1):
-        return numpy.sqrt(  2 - 2 * numpy.sqrt( a1**2 + b1**2 ) ) * self._toDeg
+        return np.sqrt(  2 - 2 * np.sqrt( a1**2 + b1**2 ) ) * self._toDeg
 
     def mean_spread(self):
         return self._spread(self.a1m,self.b1m )
 
     def _get_peak_value(self, variable ):
-        maxloc = numpy.argmax( self.Szz,1 )
+        maxloc = np.argmax( self.Szz,1 )
 
-        out = numpy.zeros( maxloc.shape )
+        out = np.zeros( maxloc.shape )
 
         if len(variable.shape) == 2:
             for ii,index in enumerate( maxloc ):
@@ -389,7 +385,7 @@ class Spectrum:
         return 1. / self._weighted_moment( self.f )
 
     def significant_wave_height(self):
-        return 4.*numpy.sqrt(self._moment( 1.))
+        return 4.*np.sqrt(self._moment( 1.))
 
     def generate_text_file(self):
         hm0   = self.significant_wave_height()
@@ -613,8 +609,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     a Spotter into one datastructure and saves the result as a CSV file 
     (*outputFileName*).
     """
-    import pandas as pd
-    import numpy as np
     #
 
     fname,ext = os.path.splitext(outputFileName)
@@ -782,9 +776,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
 #end def
 
 def epochToDateArray( epochtime ):
-    #
-    import numpy as np
-    import time
     
     datetime   = np.array( [ list(time.gmtime(x))[0:6] for x in epochtime ])
     milis      = np.array( [ ( 1000 * (  x-np.floor(x) ) ) for x in epochtime ])
@@ -804,8 +795,6 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
     # a Spotter into one datastructure and saves the result as a CSV file
     # (*outputFileName*).
     #
-    import pandas as pd
-    import numpy as np
 
     def checkKeyNames(key,errorLocation):
         # Nested function to make sure input is insensitive to capitals,
@@ -1048,7 +1037,6 @@ def lowFrequencyFilter( data ):
     '''
     function to perform the low-frequency filter
     '''   
-    import numpy as np
     #
     with np.errstate(invalid='ignore',divide='ignore'):
         # Ignore division by 0 etc (this is caught below)
@@ -1525,64 +1513,72 @@ def getVersions( path ):
     #
     return version
 #
-def filterSOS(versionNumber,IIRWeightType):
-    #
-    import numpy as np
-    #second order-sections coeficients of the filter
-
+def filterSOS(versionNumber, IIRWeightType):
+    """
+    Get second-order sections coefficients for IIR filter based on version and weight type.
+    
+    Args:
+        versionNumber (int): Version number of the data format
+        IIRWeightType (int): Type of IIR weight (0=Type A, 1=Type B, 2=Type C)
+        
+    Returns:
+        numpy.ndarray or float: SOS coefficients matrix or 0 if unsupported
+        
+    Raises:
+        ValueError: If IIRWeightType is not valid for the given version
+        TypeError: If inputs are not numeric
+    """
+    
+    # Input validation
+    try:
+        versionNumber = int(versionNumber)
+        IIRWeightType = int(IIRWeightType)
+    except (ValueError, TypeError) as e:
+        raise TypeError(f"Version number and IIR weight type must be numeric. Got {type(versionNumber)}, {type(IIRWeightType)}")
+    
+    # Version 0 and below are not supported
     if versionNumber < 1:
-        #
-        sos =0.
-        return sos
-        #
-    elif versionNumber in [1,2,3]:
-        #
-        if IIRWeightType == 0:
-            #Type A
-            lp = {'a1': -1.8514229621,
-                  'a2':  0.8578089736,
-                  'b0': 0.8972684452 ,
-                  'b1': -1.7945369122 ,
-                  'b2': 0.8972684291  }             
-            hp = {'a1':-1.9318795385 ,
-                  'a2':0.9385430645 ,
-                  'b0':1.0000000000 ,
-                  'b1':-1.9999999768 ,
-                  'b2':1.0000000180 }          
-        elif IIRWeightType == 1:
-            #Type B           
-            lp = {'a1': 1.9999999964  ,
-                  'a2': 0.9999999964  ,
-                  'b0': 0.9430391609  ,
-                  'b1': -1.8860783217 ,
-                  'b2': 0.9430391609  }              
-            hp = {'a1':-1.8828311523,
-                  'a2':0.8893254984 ,
-                  'b0':1.0000000000 ,
-                  'b1':2.0000000000 ,
-                  'b2':1.0000000000 }            
-        elif IIRWeightType == 2:
-            #Type C         
-            lp = {'a1': 1.1375322034,
-                  'a2': 0.4141775928,
-                  'b0': 0.6012434213 ,
-                  'b1': -1.2024868427 ,
-                  'b2': 0.6012434213  }
-            hp = {'a1':-1.8827396569 ,
-                  'a2':0.8894088696  ,
-                  'b0':1.0000000000 ,
-                  'b1':2.0000000000 ,
-                  'b2':1.0000000000 }            
-        #
-    #
-    sos = [ [ lp['b0'],lp['b1'],lp['b2'],1.000000,lp['a1'],lp['a2'] ],
-            [ hp['b0'],hp['b1'],hp['b2'],1.000000,hp['a1'],hp['a2'] ] ]
-    sos = np.array( sos )
-    return sos
-            
+        return 0.0
+    
+    # Versions 1-3 are supported
+    if versionNumber in [1, 2, 3]:
+        # Define filter coefficients for each type
+        filter_configs = {
+            0: {  # Type A
+                'lp': {'a1': -1.8514229621, 'a2': 0.8578089736, 'b0': 0.8972684452, 'b1': -1.7945369122, 'b2': 0.8972684291},
+                'hp': {'a1': -1.9318795385, 'a2': 0.9385430645, 'b0': 1.0000000000, 'b1': -1.9999999768, 'b2': 1.0000000180}
+            },
+            1: {  # Type B
+                'lp': {'a1': 1.9999999964, 'a2': 0.9999999964, 'b0': 0.9430391609, 'b1': -1.8860783217, 'b2': 0.9430391609},
+                'hp': {'a1': -1.8828311523, 'a2': 0.8893254984, 'b0': 1.0000000000, 'b1': 2.0000000000, 'b2': 1.0000000000}
+            },
+            2: {  # Type C
+                'lp': {'a1': 1.1375322034, 'a2': 0.4141775928, 'b0': 0.6012434213, 'b1': -1.2024868427, 'b2': 0.6012434213},
+                'hp': {'a1': -1.9318795385, 'a2': 0.9385430645, 'b0': 1.0000000000, 'b1': -1.9999999768, 'b2': 1.0000000180}
+            }
+        }
+        
+        if IIRWeightType not in filter_configs:
+            raise ValueError(f"IIRWeightType {IIRWeightType} not supported for version {versionNumber}. Valid types: {list(filter_configs.keys())}")
+        
+        config = filter_configs[IIRWeightType]
+        lp, hp = config['lp'], config['hp']
+        
+        try:
+            # Build SOS matrix
+            sos = np.array([
+                [lp['b0'], lp['b1'], lp['b2'], 1.0, lp['a1'], lp['a2']],
+                [hp['b0'], hp['b1'], hp['b2'], 1.0, hp['a1'], hp['a2']]
+            ])
+            return sos
+        except Exception as e:
+            raise RuntimeError(f"Failed to create SOS matrix: {e}")
+    
+    else:
+        raise ValueError(f"Version {versionNumber} is not supported. Supported versions: 1, 2, 3")
+
+
 def applyfilter( data , kind , versionNumber, IIRWeightType ):
-    import numpy as np
-    from scipy import signal
     #
     # Apply forward/backward/filtfilt sos filter
     #
