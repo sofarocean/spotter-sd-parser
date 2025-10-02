@@ -162,6 +162,7 @@ Major Updates:
 #
 import os
 import sys
+import argparse
 
 import numpy
 
@@ -1618,28 +1619,60 @@ def applyfilter( data , kind , versionNumber, IIRWeightType ):
     return res
 
 First = True
-if __name__ == "__main__":
-    #
-    # execute only if run as a script
-    #
-    narg      = len( sys.argv[1:] )
+
+def process_spotter_data(input_path, output_path, output_format='CSV', 
+                        spectra='Szz', file_types=None):
+    """
+    Process Spotter SD card data files.
     
-    if narg>0:
-        #
-        #parse and check command line arguments
-        arguments = dict()
-        for argument in sys.argv[1:]:
-            #
-            key,val = validCommandLineArgument( argument )
-            arguments[key]=val            
-            #
-        #
-    else:
-        #
-        arguments = dict()
-        #
-    #
-    main(**arguments)
+    Args:
+        input_path: Directory containing raw Spotter data files
+        output_path: Directory to write processed files
+        output_format: Output format ('CSV', 'matlab', 'numpy')
+        spectra: Which spectra to process ('Szz', 'all', or list)
+        file_types: List of file types to process (default: all available)
+    """
+    # Implementation here - much cleaner than current main()
+    main(path=input_path, outpath=output_path, outputFileType=output_format, spectra=spectra, suffixes=file_types)
+
+def cli_main():
+    """Command-line interface for the Spotter data parser."""
+    parser = argparse.ArgumentParser(
+        description="Parse and concatenate Spotter SD card data files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python sd_file_parser.py /path/to/spotter/data
+  python sd_file_parser.py /path/to/data --output /path/to/results
+  python sd_file_parser.py /path/to/data --spectra all --format matlab
+        """
+    )
+    
+    parser.add_argument('input_path', 
+                       help='Path to directory containing Spotter data files')
+    parser.add_argument('--output', '-o', 
+                       help='Output directory (default: input_path/processed)')
+    parser.add_argument('--format', choices=['CSV', 'matlab', 'numpy'], 
+                       default='CSV', help='Output file format')
+    parser.add_argument('--spectra', default='Szz',
+                       help='Spectra to process (default: Szz, use "all" for everything)')
+    
+    args = parser.parse_args()
+    
+    # Set default output path
+    if args.output is None:
+        args.output = os.path.join(args.input_path, 'processed')
+    
+    # Call the actual processing function
+    process_spotter_data(
+        input_path=args.input_path,
+        output_path=args.output,
+        output_format=args.format,
+        spectra=args.spectra
+    )
+
+if __name__ == '__main__':
+    cli_main()
 
 
 
