@@ -164,10 +164,12 @@ import os
 import sys
 import argparse
 import time
+from glob import glob
 
 import numpy as np
 import pandas as pd
 from scipy import signal
+from scipy.io import savemat
 #'SHA <-> version-number' relation
 #(note that dual entry for 1.2.5/1.4.2 is due to update glitches)
 supportedVersions    = {'1446ABC':'1.2.5','9BEADBE':'1.3.0','2FDC90':'1.4.1',
@@ -721,18 +723,16 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         # To save to matlab .mat format we need scipy
         #
-        try:
-            import scipy
-            from scipy import io                
+        try:            
             #
             if kind=='FLT':
-                scipy.io.savemat( outputFileName ,
+                savemat( outputFileName ,
                     {'x':data[:,7].astype(np.float32),
                      'y':data[:,8].astype(np.float32),
                      'z':data[:,9].astype(np.float32),
                   'time':data[:,0:7].astype(np.int16)} )
             elif kind=='GPS':
-                scipy.io.savemat( outputFileName ,
+                savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
                      'Lon':data[:,8].astype(np.float32),
                      'elevation':data[:,9].astype(np.float32),
@@ -741,7 +741,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
                      'w':data[:,12].astype(np.float32),                     
                      'time':data[:,0:7].astype(np.int16)} )                
             else:
-                scipy.io.savemat( outputFileName ,
+                savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
                      'Lon':data[:,8].astype(np.float32),
                   'time':data[:,0:7].astype(np.int16)} )                
@@ -1001,11 +1001,8 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
             # To save to matlab .mat format we need scipy
             #
             try:
-                import scipy
-                from scipy import io                
-                #
                 mat = data[key]
-                scipy.io.savemat(
+                savemat(
                         os.path.join( outputPath , outputFileName[key]),
                         {'spec':mat[:,8:].astype(np.float32),
                         'time':mat[:,0:7].astype(np.int16),
