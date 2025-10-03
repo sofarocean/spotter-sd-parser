@@ -414,20 +414,21 @@ class Spectrum:
             #
         #
 
-def main( path = None , outpath=None, outputFileType='CSV',
-          spectra='all',suffixes=None,parsing=None,lfFilter=False,bulkParameters=True):
+
+def parse_spotter_files( input_path = None , output_path=None, output_format='CSV',
+          spectra='all', file_types=None, lf_filter = False):
     """ 
     Combine selected SPOTTER output files  into CSV files. This 
-    routine is called by __main__ and that calls in succession the separate 
+    routine is called by cli_main and that calls in succession the separate 
     routines to concatenate, and parse files. 
     """
 
     #Check the version of Files
-    versions =  getVersions( path )
+    versions =  getVersions( input_path )
 
     #The filetypes to concatenate
-    if suffixes is None:
-        suffixes = [
+    if file_types is None:
+        file_types = [
             'FLT',
             'SPC',
             'SYS',
@@ -436,13 +437,12 @@ def main( path = None , outpath=None, outputFileType='CSV',
             'SST',
         ]
 
-    if parsing is None:
-        parsing = [
-            'FLT',
-            'SPC',
-            'LOC',
-            'SST',
-        ]
+    parsing = [
+        'FLT',
+        'SPC',
+        'LOC',
+        'SST',
+    ]
 
     if any( [ version['number'] < 3 for version in versions ] ):
         print("WARNING: This parser version no longer supports legacy SST files (firmware 1.12.x and below).")
@@ -452,29 +452,29 @@ def main( path = None , outpath=None, outputFileType='CSV',
         answer = input()
         if answer.lower() == 'q':
             sys.exit(1)
-        for collection in suffixes, parsing:
+        for collection in file_types, parsing:
             collection.remove('SST')
 
     outFiles    = {'FLT':'displacement','SPC':'spectra','SYS':'system',
                        'LOC':'location','GPS':'gps','SST':'sst'}
 
-    if path is None:
+    if input_path is None:
         #
         # If no path given, assume current directory
         #
-        path = os.getcwd()
+        input_path = os.getcwd()
         #
     else:
         #
-        path = os.path.abspath(path)
+        input_path = os.path.abspath(input_path)
         #    
     
-    if (outpath is None):
+    if output_path is None:
         #
-        outpath = path
+        output_path = os.path.join(input_path, 'processed')
         #
     else:
-        outpath =  os.path.abspath(outpath)
+        output_path =  os.path.abspath(output_path)
         #
     #
 
@@ -490,7 +490,7 @@ def main( path = None , outpath=None, outputFileType='CSV',
     #
     #
     # Loop over versions
-    outp = outpath
+    outp = output_path
     if len(versions) == 1:
         # if there is only a single version- we allow all files to be parsed.
         # this is a clutch to account for the fact that sys files are not
@@ -508,32 +508,30 @@ def main( path = None , outpath=None, outputFileType='CSV',
             # When there are multiple conflicting version, we push output
             # to different subdirectories
             #
-            outpath = os.path.join( outp,str(index) )
+            output_path = os.path.join( outp,str(index) )
             #
         else:
             #            
-            outpath = outp
+            output_path = outp
             #
         #
             
-        if not os.path.exists(outpath):
+        if not os.path.exists(output_path):
             #
-            os.makedirs(outpath)
+            os.makedirs(output_path)
             #
         #            
 
-        for suffix in suffixes:
+        for suffix in file_types:
             #
-            fileName = os.path.join( outpath , outFiles[suffix] + '.csv' )
+            fileName = os.path.join( output_path , outFiles[suffix] + '.csv' )
             # 
             # For each filetype, concatenate files to intermediate CSV files...
 
             print( 'Concatenating all ' + suffix + ' files:')
-            if not (cat(path=path, outputFileType='CSV',Suffix=suffix,
+            if not (cat(path=input_path, outputFileType='CSV',Suffix=suffix,
                     outputFileName=fileName,
-                    versionFileList=version['fileNumbers'],
-                    compatibility_version=version['number'])
-                    ):
+                    versionFileList=version['fileNumbers'])):
                 #
                 continue
                 #
@@ -557,7 +555,7 @@ def main( path = None , outpath=None, outputFileType='CSV',
                     try:
                         parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
-                            outputFileType=outputFileType,
+                            outputFileType=output_format,
                             versionNumber=version['number'],
                             IIRWeightType=version['IIRWeightType'])
                     except OSError as e:
@@ -570,9 +568,10 @@ def main( path = None , outpath=None, outputFileType='CSV',
                     #extract relevant spectra (Szz, Sxx etc.) from the bulk 
                     #spectral file
                     parseSpectralFiles(inputFileName = fileName,
-                                outputPath=outpath,
-                                outputFileType=outputFileType,
-                                outputSpectra=outputSpectra,lfFilter=lfFilter,
+                                outputPath=output_path,
+                                outputFileType=output_format,
+                                outputSpectra=outputSpectra,
+                                lf_filter=lf_filter,
                                 versionNumber=version['number'])
                     os.remove( fileName )
                     #
@@ -582,12 +581,13 @@ def main( path = None , outpath=None, outputFileType='CSV',
         #suffix
         #
         # Generate bulk parameter file
-        if bulkParameters:
-            spectrum = Spectrum(path=outpath,outpath=outpath)
-            spectrum.generate_text_file()
+        spectrum = Spectrum(path=output_path,outpath=output_path)
+        spectrum.generate_text_file()
     #Versions
     #
-    print("Done.")
+    print("Done. Processed data saved in : " + output_path )
+    return output_path
+    
 
 #end def
 
@@ -783,12 +783,16 @@ def epochToDateArray( epochtime ):
 #
     
 
-def parseSpectralFiles(   inputFileName=None, outputPath = None,
-                          outputFileNameDict = None,
-                          spectralDataSuffix='SPC', reportProgress=True      ,
-                          nf=128                  , df=0.009765625           ,
-                          outputSpectra=None      , outputFileType='CSV'     ,
-                          lfFilter=False,versionNumber=defaultVersion):
+def parseSpectralFiles( inputFileName=None, 
+                        outputPath = None,
+                        outputFileNameDict = None,
+                        reportProgress=True,
+                        nf=128, 
+                        df=0.009765625,
+                        outputSpectra=None, 
+                        outputFileType='CSV',
+                        lf_filter = False,
+                        versionNumber=defaultVersion):
 
     #
     # This functions loads all the Spectral data (located at *path*) from
@@ -930,7 +934,6 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
         #
         data[key][:,0:3] = np.nan
         #
-            
     # Calculate directional moments from data (if requested). Because these are
     # derived quantities these need to be included in the dataframe a-postiori
     if any( [ x in ['a1','b1','a2','b2'] for x in outputSpectra ] ):
@@ -956,9 +959,8 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
             data[key][ np.isnan(data[key] ) ]= np.nan
     #
 
-    if lfFilter:
-        #
         # Filter lf-noise
+    if lf_filter:
         data = lowFrequencyFilter( data )
         #
     #
@@ -1141,8 +1143,7 @@ def extensions( outputFileType ):
         #
     else:
         #
-        raise Exception('Unknown outputFileType; options are:'
-                            + 'numpy , matlab , pickle , csv')
+        raise ValueError('Unknown outputFileType; options are: numpy , matlab , pickle , csv')
         #
     #
 #
@@ -1150,8 +1151,7 @@ class missingFLTFile(Exception):
     pass
 
 def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
-             reportProgress=True, outputFileType='CSV',versionFileList=None,
-            compatibility_version=defaultVersion):
+             reportProgress=True, outputFileType='CSV',versionFileList=None):
     """
     This functions concatenates raw csv files with a header. Only for the first 
     file it retains the header. Note that for SPEC files special
@@ -1160,13 +1160,13 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
     import gzip
     #
 
-    def modeDetection( path , filename ):
+    def modeDetection( input_path , filename ):
         #
         # Here we detect if we are in debug or in production mode, we do this
         # based on the first few lines; in debug these will contain either
         # FFT or SPEC, whereas in production only SPECA is encountered
         mode = 'production'
-        with open(os.path.join( path,filename) ) as infile:
+        with open(os.path.join( input_path,filename) ) as infile:
             #
             jline = 0 
             for line in infile:
@@ -1613,20 +1613,6 @@ def applyfilter( data , kind , versionNumber, IIRWeightType ):
 
 First = True
 
-def process_spotter_data(input_path, output_path, output_format='CSV', 
-                        spectra='Szz', file_types=None):
-    """
-    Process Spotter SD card data files.
-    
-    Args:
-        input_path: Directory containing raw Spotter data files
-        output_path: Directory to write processed files
-        output_format: Output format ('CSV', 'matlab', 'numpy')
-        spectra: Which spectra to process ('Szz', 'all', or list)
-        file_types: List of file types to process (default: all available)
-    """
-    # Implementation here - much cleaner than current main()
-    main(path=input_path, outpath=output_path, outputFileType=output_format, spectra=spectra, suffixes=file_types)
 
 def cli_main():
     """Command-line interface for the Spotter data parser."""
@@ -1647,8 +1633,8 @@ Examples:
                        help='Output directory (default: input_path/processed)')
     parser.add_argument('--format', choices=['CSV', 'matlab', 'numpy'], 
                        default='CSV', help='Output file format')
-    parser.add_argument('--spectra', default='Szz',
-                       help='Spectra to process (default: Szz, use "all" for everything)')
+    parser.add_argument('--spectra', default='all',
+                       help='Spectra to process (e.g., Szz, all, or list)')
     
     args = parser.parse_args()
     
@@ -1657,7 +1643,7 @@ Examples:
         args.output = os.path.join(args.input_path, 'processed')
     
     # Call the actual processing function
-    process_spotter_data(
+    parse_spotter_files(
         input_path=args.input_path,
         output_path=args.output,
         output_format=args.format,
