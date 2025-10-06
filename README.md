@@ -55,8 +55,8 @@ The SD card parsing scripts can be called either from the command line or from w
 
 To run the SD card file parser from within a python instance in your terminal or from an IDE, you will need to import the module before running the primary function:
 
-      from sd_file_parser import parse_spotter_files'
-       `output_dir = parse_spotter_files('path_to_SD_card_data')`
+      from sd_file_parser import parse_spotter_files
+      output_dir = parse_spotter_files('path_to_SD_card_data')
 
 
 ## Optional arguments
