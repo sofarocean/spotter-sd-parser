@@ -36,35 +36,37 @@ the script requires that the following python modules:
 
         dependencies: pandas, numpy, scipy
          
+The following are additional dependencies for the testing ifrastructure, and only necessary if you plan to contribute to the repositor: pytest, pytest-cov, and pytest-mock.
 These modules can be installed by invoking the python package manager
 (pip) from the command line. For instance, to install pandas you would
 run the package manager from the command line as:
 
         pip3 install pandas
 
-and similarly for other missing dependencies.
+and similarly for other missing dependencies. Or, you can install all dependencies using 
+
+        pip3 install -r requirements.txt
 
 # Usage
 
-To use the module, simply copy the Spotter files and this script into the
-same directory. Subsequently, start a command line terminal, navigate 
-to the directory containing the files and run the python script from the 
-command line using the python interpreter as:
+The SD card parsing scripts can be called either from the command line or from within a python instance (either from the terminal or from an IDE, such as pycharm or VSCode). To run from the command line, open a terminal window, navigate to the directory which hosts the SD card parsing script, and run 
+ 
+       python3 sd_file_parser.py 'path_to_SD_card_data'. 
 
-        python3 sd_file_parser.py
+To run the SD card file parser from within a python instance in your terminal or from an IDE, you will need to import the module before running the primary function:
 
-or any other python interpreter (e.g. ipython, python etc.).
+      from sd_file_parser import parse_spotter_files'
+       `output_dir = parse_spotter_files('path_to_SD_card_data')`
 
-## Requesting additional output:
 
-By default, the script will only produce the variance density spectrum.
-If in addition the directional moments are desired, add the command line
-switch `spectra=all`, i.e.:
+## Optional arguments
 
-        python3 sd_file_parser.py spectra='all'
+The SD file parsing script only requires the path to the directory containing the raw SD card files. However, there are several optional input arguments:
 
-in which case files containing a1,b1,a2,b2 (in separate files) will be
-produced.
+        --output_path: Output directory (default: input_path/processed)
+        --format: Output file format -- CSV, numpy, or matlab (default: CSV)
+        --spectra: Spectra to process (e.g., Szz, all, or list) (default: all)
+
 
 # Output
 
@@ -145,9 +147,9 @@ We encourage a standard [GitHub flow](https://docs.github.com/en/get-started/qui
 
 We are (at the time of this writing) beginning to write and collect unit tests in tests/ 
 
-To test, the following can be run from the root of the repo:
+You can use `pytest` for running tests with coverage:
 
-`% python3 -m unittest tests/*.py`
+`% pytest --cov=spotter_sd_parser tests/`
 
 # License
 

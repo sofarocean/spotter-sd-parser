@@ -195,7 +195,7 @@ class TestCLI:
         test_args = [
             'sd_file_parser.py', 
             '/input/path',
-            '--output', '/output/path',
+            '--output_path', '/output/path',
             '--format', 'matlab',
             '--spectra', 'all'
         ]
