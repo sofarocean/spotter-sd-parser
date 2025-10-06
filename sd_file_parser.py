@@ -283,7 +283,7 @@ class Spectrum:
         df = np.mean(np.diff( self.f))
         E = self.Szz * values
         jstart =3
-        return np.trapz(  E[:,jstart:],self.f[jstart:] ,1  )
+        return numpy.trapezoid(  E[:,jstart:],self.f[jstart:] ,1  )
 
     def _weighted_moment(self , values ):
         return self._moment( values ) / self._moment(1.)
