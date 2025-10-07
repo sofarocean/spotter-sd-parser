@@ -17,26 +17,26 @@ class CatTest(unittest.TestCase):
     def testCatSst(self):
         for suffix in self.suffixes:
             # just SST right now
-            outputFileName = os.path.join(self.outputpath, self.outFiles[suffix] + '.csv')
-            result = cat(path=self.inputpath, Suffix=suffix)
+            outputFileName = os.path.join(self.output_path, self.outFiles[suffix] + '.csv')
+            result = cat(path=self.input_path, Suffix=suffix)
 
     def setUp(self):
         """
         prepare for running the parser
         """
-        # note relative path
-        self.inputpath = 'example_data/2021-01-15'
-        self.inputfn = '0235_SST.CSV'
-        self.inputfqfn = os.path.join(self.inputpath, self.inputfn)
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.input_path = os.path.join(project_root, 'example_data', '2021-01-15')
+        inputfn = '0235_SST.CSV'
+        inputfqfn = os.path.join(self.input_path, inputfn)
 
-        self.outputpath = tempfile.mkdtemp()
+        self.output_path = os.path.join(self.input_path, 'processed')
 
         # borrowed from parser script main()
         # self.suffixes = ['FLT','SPC','SYS','LOC','GPS','SST']
         self.suffixes = ['SST']
         self.outFiles    = {'FLT':'displacement','SPC':'spectra','SYS':'system',
                        'LOC':'location','GPS':'gps','SST':'sst'}
-        if not self.outputpath:
+        if not self.output_path:
             raise ValueError('problem creating temporary output directory')
 
         

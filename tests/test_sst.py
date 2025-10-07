@@ -38,7 +38,9 @@ class SSTParsingTest(unittest.TestCase):
         """
         prepare for running the parser
         """
-        self.inputfn = 'example_data/2021-01-15/0235_SST.CSV'
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        input_path = os.path.join(project_root, 'example_data', '2021-01-15')
+        self.inputfn = os.path.join(input_path, '0235_SST.CSV')
         self.outputfn = 'sst.csv'
         
     def tearDown(self):

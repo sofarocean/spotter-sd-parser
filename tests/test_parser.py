@@ -4,6 +4,8 @@ import os
 import shutil
 import numpy as np
 import pandas as pd
+from math import ceil
+import time
 from unittest.mock import patch, mock_open, MagicMock
 
 # Import the functions we want to test
@@ -13,6 +15,7 @@ from sd_file_parser import (
     epochToDateArray,
     getVersions,
     parseSpectralFiles,
+    parseLocationFiles,
     cli_main
 )
 
@@ -33,7 +36,6 @@ def test_setup():
     if os.path.exists(output_path):
         print(f"cleanup: deleting {output_path}")
         shutil.rmtree(output_path)
-
 
 class TestFilterSOS:
     """Tests for the filterSOS function."""
@@ -98,6 +100,42 @@ class TestEpochToDateArray:
         
         assert abs(result[0, 6] - 123.0) < 1.0  # Allow for floating point precision
 
+class LocationParsingTest:
+
+    def testBasicParserRun(self, test_setup):
+        input_dir = test_setup['input_path']
+        output_dir = test_setup['output_path']
+
+        self.inputfn = os.path.join(input_dir, '0235_LOC.CSV')
+        self.outputfn = f"location_{ceil(time.time()):x}.csv"
+        parseLocationFiles( inputFileName = self.inputfn, kind='LOC', outputFileName=self.outputfn )
+        self.assertTrue( os.path.exists( self.outputfn ) ) 
+        self.assertFalse( os.path.exists( 'displacement.csv' ) )
+
+    def testOutputLocationIsValidFloat(self):
+        # test against bug where V3 LOC files are misinterpreted as not being floats
+        parseLocationFiles( inputFileName = r'../example_data/2024-09-23/0002_LOC.csv', kind='LOC', outputFileName=self.outputfn )
+        self.assertTrue( os.path.exists( self.outputfn ) ) 
+        # print(f"wrote file to {self.outputpath}...?", file=sys.stderr)
+        with open(self.outputfn, 'r') as csvf:
+            # bad: 2024,9,23,14,54,24,0,  37.00000000,-122.00000000
+            # skip header
+            _ = csvf.readline()
+            firstline = csvf.readline()
+        self.assertFalse(firstline.rstrip().endswith(',  37.00000000,-122.00000000'))
+
+    def testNoOutputPathParserRun(self, test_setup):
+        """
+        show that parseLocationFiles() can't take an output path argument
+            ...though its partner parseSpectr[...] can...
+            ...probably because it only generates one file whereas the spectral 
+               equivalent can output many...
+        """
+        input_dir = test_setup['input_path']
+        self.inputfn = os.path.join(input_dir, '0235_LOC.CSV')
+        output_dir = test_setup['output_path']
+        with self.assertRaises(TypeError) as cm:
+            parseLocationFiles( inputFileName = self.inputfn, outputPath = output_dir)
 
 class TestParseSpotterData:
     """Tests for the process_spotter_data function."""
@@ -219,24 +257,26 @@ class TestParseSpectralFiles:
         run the parser on example data, while customizing which
         output files we want
         """
-        input_path, output_path = test_setup
-        self.inputfn = os.path.join(input_path, '0235_SPC.CSV')
-        parseSpectralFiles( inputFileName = self.inputfn, outputPath = self.outputpath,
+        input_path, output_path = test_setup['input_path'], test_setup['output_path']
+        inputfn = os.path.join(input_path, '0235_SPC.CSV')
+        parseSpectralFiles( inputFileName = inputfn, outputPath = output_path,
             outputSpectra = ['Szz', 'Sxx'] )
         # did the output files get created?
         # only Szz gets created by default (see lines 827-829)
-        self.assertTrue( os.path.exists( os.path.join( self.outputpath, 'Szz.csv' ) ) )
-        self.assertTrue( os.path.exists( os.path.join( self.outputpath, 'Sxx.csv' ) ) )
+        assert os.path.exists(os.path.join(output_path, 'Szz.csv'))
+        assert os.path.exists(os.path.join(output_path, 'Sxx.csv'))
 
 
-    def testBasicParserRun(self):
+    def testBasicParserRun(self, test_setup):
         """
         run the parser on example data, using default parameters
         """
-        parseSpectralFiles( inputFileName = self.inputfn, outputPath = self.outputpath )
+        input_path, output_path = test_setup['input_path'], test_setup['output_path']
+        inputfn = os.path.join(input_path, '0235_SPC.CSV')
+        parseSpectralFiles( inputFileName = inputfn, outputPath = output_path )
         # did the output file get created?
         # only Szz gets created by default (see lines 827-829)
-        self.assertTrue( os.path.exists( os.path.join( self.outputpath, 'Szz.csv' ) ) )
+        assert os.path.exists(os.path.join(output_path, 'Szz.csv'))
 
 
 # Integration tests
