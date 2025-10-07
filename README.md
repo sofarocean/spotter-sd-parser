@@ -36,7 +36,7 @@ the script requires that the following python modules:
 
         dependencies: pandas, numpy, scipy
          
-The following are additional dependencies for the testing ifrastructure, and only necessary if you plan to contribute to the repositor: pytest, pytest-cov, and pytest-mock.
+The following are additional dependencies for the testing infrastructure, and only necessary if you plan to contribute to the repository: pytest, pytest-cov, and pytest-mock.
 These modules can be installed by invoking the python package manager
 (pip) from the command line. For instance, to install pandas you would
 run the package manager from the command line as:
