@@ -788,7 +788,7 @@ def parseSpectralFiles( inputFileName=None,
             data[key][ np.isnan(data[key] ) ]= np.nan
     #
 
-        # Filter lf-noise
+    # Filter lf-noise
     if lf_filter:
         data = lowFrequencyFilter( data )
         #
@@ -1380,7 +1380,7 @@ def filterSOS(versionNumber, IIRWeightType):
             },
             2: {  # Type C
                 'lp': {'a1': 1.1375322034, 'a2': 0.4141775928, 'b0': 0.6012434213, 'b1': -1.2024868427, 'b2': 0.6012434213},
-                'hp': {'a1': -1.9318795385, 'a2': 0.9385430645, 'b0': 1.0000000000, 'b1': -1.9999999768, 'b2': 1.0000000180}
+                'hp': {'a1': -1.8827396569, 'a2': 0.8894088696, 'b0': 1.0000000000, 'b1': 2.0000000000, 'b2': 1.0000000000}
             }
         }
         
