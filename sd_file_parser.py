@@ -543,7 +543,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
 
     if outputFileType.lower() in ['csv','gz']:
         #
-        print(outputFileName)
         np.savetxt(outputFileName ,
             data ,fmt=fmt,
             header=header)
@@ -981,7 +980,7 @@ class missingFLTFile(Exception):
     pass
 
 def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
-             reportProgress=True, outputFileType='CSV',versionFileList=None):
+             reportProgress=True, outputFileType='CSV',versionFileList=None, compatibilityVersion=defaultVersion):
     """
     This functions concatenates raw csv files with a header. Only for the first 
     file it retains the header. Note that for SPEC files special
