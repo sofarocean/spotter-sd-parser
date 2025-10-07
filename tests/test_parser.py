@@ -100,31 +100,39 @@ class TestEpochToDateArray:
         
         assert abs(result[0, 6] - 123.0) < 1.0  # Allow for floating point precision
 
-class LocationParsingTest:
-
-    def testBasicParserRun(self, test_setup):
+class TestLocationParsing:
+    
+    def test_basic_location_parsing(self, test_setup): 
         input_dir = test_setup['input_path']
         output_dir = test_setup['output_path']
+        os.makedirs( output_dir, exist_ok=True )
 
-        self.inputfn = os.path.join(input_dir, '0235_LOC.CSV')
-        self.outputfn = f"location_{ceil(time.time()):x}.csv"
-        parseLocationFiles( inputFileName = self.inputfn, kind='LOC', outputFileName=self.outputfn )
-        self.assertTrue( os.path.exists( self.outputfn ) ) 
-        self.assertFalse( os.path.exists( 'displacement.csv' ) )
+        inputfn = os.path.join(input_dir, '0235_LOC.CSV')
+        outputfn = os.path.join(output_dir, f"location_{ceil(time.time()):x}.csv")
+        
+        parseLocationFiles( inputFileName = inputfn, kind='LOC', outputFileName=outputfn )
+        print(f"Files in output dir: {os.listdir(output_dir) if os.path.exists(output_dir) else 'Directory does not exist'}")
+        assert os.path.exists( outputfn )
+        assert not os.path.exists( os.path.join(output_dir, 'displacement.csv') )  # ensure default name not used
 
-    def testOutputLocationIsValidFloat(self):
+    def test_output_location_is_valid_float(self, test_setup):
         # test against bug where V3 LOC files are misinterpreted as not being floats
-        parseLocationFiles( inputFileName = r'../example_data/2024-09-23/0002_LOC.csv', kind='LOC', outputFileName=self.outputfn )
-        self.assertTrue( os.path.exists( self.outputfn ) ) 
-        # print(f"wrote file to {self.outputpath}...?", file=sys.stderr)
-        with open(self.outputfn, 'r') as csvf:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        inputfn = os.path.join(project_root, 'example_data', '2024-09-23', '0002_LOC.csv')
+        output_dir = test_setup['output_path']
+        os.makedirs( output_dir, exist_ok=True )
+        outputfn = os.path.join(output_dir, f"location_{ceil(time.time()):x}.csv")
+        parseLocationFiles( inputFileName = inputfn, kind='LOC', outputFileName=outputfn )
+        assert os.path.exists( outputfn ) 
+        
+        with open(outputfn, 'r') as csvf:
             # bad: 2024,9,23,14,54,24,0,  37.00000000,-122.00000000
             # skip header
             _ = csvf.readline()
             firstline = csvf.readline()
-        self.assertFalse(firstline.rstrip().endswith(',  37.00000000,-122.00000000'))
+        assert not firstline.rstrip().endswith(',  37.00000000,-122.00000000')  # Use assert instead of self.assertFalse
 
-    def testNoOutputPathParserRun(self, test_setup):
+    def test_no_output_path(self, test_setup):
         """
         show that parseLocationFiles() can't take an output path argument
             ...though its partner parseSpectr[...] can...
@@ -132,10 +140,10 @@ class LocationParsingTest:
                equivalent can output many...
         """
         input_dir = test_setup['input_path']
-        self.inputfn = os.path.join(input_dir, '0235_LOC.CSV')
+        inputfn = os.path.join(input_dir, '0235_LOC.CSV')
         output_dir = test_setup['output_path']
-        with self.assertRaises(TypeError) as cm:
-            parseLocationFiles( inputFileName = self.inputfn, outputPath = output_dir)
+        with pytest.raises(TypeError):  # Use pytest.raises instead of self.assertRaises
+            parseLocationFiles( inputFileName = inputfn, output_path = output_dir )
 
 class TestParseSpotterData:
     """Tests for the process_spotter_data function."""
@@ -144,7 +152,6 @@ class TestParseSpotterData:
         """Test parse_spotter_files with valid inputs."""
         input_dir = test_setup['input_path']
         output_dir = test_setup['output_path']
-        # Call the actual function (not mocked)
         parse_spotter_files(input_dir, output_dir)
         
         # Check that output directory exists
@@ -252,12 +259,13 @@ class TestCLI:
 class TestParseSpectralFiles:
     """Tests for parseSpectralFiles function."""
     
-    def testExplicitOutputParserRun(self, test_setup):
+    def test_ExplicitOutputParserRun(self, test_setup):
         """
         run the parser on example data, while customizing which
         output files we want
         """
         input_path, output_path = test_setup['input_path'], test_setup['output_path']
+        os.makedirs( output_path, exist_ok=True )
         inputfn = os.path.join(input_path, '0235_SPC.CSV')
         parseSpectralFiles( inputFileName = inputfn, outputPath = output_path,
             outputSpectra = ['Szz', 'Sxx'] )
@@ -267,11 +275,12 @@ class TestParseSpectralFiles:
         assert os.path.exists(os.path.join(output_path, 'Sxx.csv'))
 
 
-    def testBasicParserRun(self, test_setup):
+    def test_BasicParserRun(self, test_setup):
         """
         run the parser on example data, using default parameters
         """
         input_path, output_path = test_setup['input_path'], test_setup['output_path']
+        os.makedirs( output_path, exist_ok=True )
         inputfn = os.path.join(input_path, '0235_SPC.CSV')
         parseSpectralFiles( inputFileName = inputfn, outputPath = output_path )
         # did the output file get created?

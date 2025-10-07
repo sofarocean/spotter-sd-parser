@@ -543,6 +543,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
 
     if outputFileType.lower() in ['csv','gz']:
         #
+        print(outputFileName)
         np.savetxt(outputFileName ,
             data ,fmt=fmt,
             header=header)
