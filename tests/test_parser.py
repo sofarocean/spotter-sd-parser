@@ -338,7 +338,6 @@ class TestIntegration:
             # For CSV files, verify they have headers and data
             if output_file.endswith('.csv'):
                 try:
-                    import pandas as pd
                     df = pd.read_csv(full_path)
                     assert len(df.columns) > 0, f"CSV has no columns: {output_file}"
                     assert len(df) >= 0, f"CSV has no data: {output_file}"  # Allow empty data
