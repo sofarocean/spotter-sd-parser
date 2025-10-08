@@ -130,7 +130,7 @@ class TestLocationParsing:
             # skip header
             _ = csvf.readline()
             firstline = csvf.readline()
-        assert not firstline.rstrip().endswith(',  37.00000000,-122.00000000')  # Use assert instead of self.assertFalse
+        assert not firstline.rstrip().endswith(',  37.00000000,-122.00000000')  
 
     def test_no_output_path(self, test_setup):
         """
@@ -142,7 +142,7 @@ class TestLocationParsing:
         input_dir = test_setup['input_path']
         inputfn = os.path.join(input_dir, '0235_LOC.CSV')
         output_dir = test_setup['output_path']
-        with pytest.raises(TypeError):  # Use pytest.raises instead of self.assertRaises
+        with pytest.raises(TypeError):  
             parseLocationFiles( inputFileName = inputfn, output_path = output_dir )
 
 class TestParseSpotterData:
