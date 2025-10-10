@@ -1,169 +1,388 @@
-#!/usr/bin/env python3
-
-""" 
-See the NOTICE file distributed with this work for additional
-information regarding copyright ownership.  Sofar Ocean Technologies
-licenses this file to you under the Apache License, Version 2.0 (the
-"License"); you may not use this file except in compliance with the License. 
-You may obtain a copy of the License at
-
-  http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.  See the
-License for the specific language governing permissions and limitations
-under the License.  
-"""
-
-""" 
-Purpose:
-
-    For efficiency, SPOTTER stores wave spectra, mean location and
-    displacement data on the SD card across multiple files. In order to 
-    access the data for post processing it is convenient to first 
-    recombine each data type in a single file. 
-
-    This module contains functions to process SPOTTER output files containing 
-    spectra, mean location and displacement information, and concatenate all 
-    files pertaining to a specific data type (e.g. displacements) into a single
-    comma delimited (CSV) file. For example, all displacement information 
-    (contained in ????_FLT.CSV) is combined as
-
-       (input)                                (output) 
-    0010_FLT.CSV  -|
-    0011_FLT.CSV   |      running script
-    0012_FLT.CSV   |           ==== >       displacement.CSV
-    ............   |
-    000N_FLT.CSV  -|
-
-    and similarly for spectral ( xxxx_SPC.CSV => Szz.csv) and location
-    (xxxx_LOC.CSV => location.csv) files. Further, after all spectral files have
-    been combined. Bulk parameters (significant wave height, peak period, etc.)
-    are calculated from the spectral files, and stored separately in bulkparameters.csv
-
-    NOTE: the original data files will remain unchanged.
-
-Install:
-
-    In order to use this script, python (version 2 or 3) needs to be installed
-    on the system (download at: www.python.org). In addition, for functionality 
-    the script requires that the following python python modules:
-
-        dependencies: pandas, numpy, scipy
-         
-    These modules can be installed by invoking the python package manager
-    (pip) from the command line. For instance, to install pandas you would
-    run the package manager from the command line as:
-
-        pip install pandas
-
-    and similarly for other missing dependencies.
-
-Usage:
-
-    To use the module, simply copy the SPOTTER files and this script into the
-    same directory. Subsequently, start a command line terminal, navigate 
-    to the directory containing the files and run the python script from the 
-    command line using the python interpreter as:
-
-        python sd_file_parser.py
-
-    or any other python interpreter (e.g. ipython, python3 etc.).
-
-    Requesting additional output:
-
-        By default, the script will only produce the variance density spectrum.
-        If in addition the directional moments are desired, add the command line
-        switch spectra=all, i.e.:
-
-        python spotter.py spectra='all'
-
-        in which case files containing a1,b1,a2,b2 (in separate files) will be
-        produced.
-
-Output:
-
-    After completion, the following files will have been created in the working
-    directory:
-
-        FILE              :: DESCRIPTION
-        ------------------------------------------------------------------------
-        Szz.csv           :: Variance density spectra of vertical displacement [meter * meter / Hz]
-        Sxx.csv           :: Variance density spectra of eastward displacement [meter * meter / Hz]
-        Syy.csv           :: Variance density spectra of northward displacement [meter * meter / Hz]
-        Qxz.csv           :: Quad-spectrum between vertical and eastward displacement [meter * meter / Hz]
-        Qyz.csv           :: Quad-spectrum between vertical and northward displacement [meter * meter / Hz]
-        Cxy.csv           :: Co-spectrum between northward and eastward displacement [meter * meter / Hz]
-        a1.csv            :: First order cosine coefficient [ - ]
-        b1.csv            :: First order sine coefficient   [ - ]
-        a2.csv            :: Second order cosine coefficient  [ - ]
-        b2.csv            :: Second order sine coefficient  [ - ]
-        location.csv      :: Average location (lowpass filtered instantaneous
-                             location) in terms of latitude and longitude
-                             (decimal degrees)
-        displacement.csv  :: Instantaneous displacement from mean location 
-                             along north, east and vertical directions(in meter)
-        bulkparameters    :: Bulk wave parameters (Significant wave height, peak period, etc.)
-
-     Data is stored as comma delimited file, where each new line corresponds to 
-     a new datapoint in time, and the individual columns contain different data
-     entries (time, latitude, longitude etc.).
-
-     The spectra files start at the first line with a header line and each
-     subsequent line contains the wave spectrum calculated at the indicated time
-
-     HEADER:   year,month,day,hour,min,sec,milisec,dof , 0.0 , f(1) , f(2) , .... , (nf-1) * df
-               2017,11   ,10 ,5   ,3  ,1  ,300     ,30 , E(0), E(1) , E(2) , .... , E(nf-1)
-               2017,11   ,10 ,5   ,33 ,1  ,300     ,30 , E(0), E(1) , E(2) , .... , E(nf-1)
-                |    |    |   |    |   |   |        |    |    |       |     |
-               2017,12   ,20 ,0   ,6  ,1  ,300     ,30 , E(0), E(1) , E(2) , .... , E(nf-1)
-
-    The first columns indicate the time (year, month etc.) and dof is the 
-    degrees of freedom (dof) used to calculate the spectra. After 
-    the degrees of freedom, each subsequent entry corresponds to the variance 
-    density at the frequency indicated by the header line (E0 is the energy in
-    the mean, E1 at the first frequency f1 etc). The Spotter records
-    at an equidistant spectral resolution of df=0.009765625 and there are
-    nf=128 spectral entries, given by f(j) = df * j (with 0<=j<128). Frequencies are
-    in Hertz, and spectral entries are given in squared meters per Hz (m^2/Hz) or 
-    are dimensionless (for the directional moments a1,a2,b1,b2).
-
-    The bulk parameter (bulkparameters.csv) file starts with a header line
-    and subsequent lines contain the bulk parameters calculated at the
-    indicated time
-
-    HEADER:    # year , month , day, hour ,min, sec, milisec , Significant Wave Height, Mean Period, Peak Period, Mean Direction, Peak Direction, Mean Spreading, Peak Spreading
-               2017,11   ,10 ,5   ,3  ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
-               2017,11   ,10 ,5   ,33 ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
-                |    |    |   |    |   |   |        |     | ,   | , | , |  , |   , |  , |
-               2017,12   ,20 ,0   ,6  ,1  ,300     ,30 , Hs , Tm01, Tp, Dir, PDir, Spr, PSpr
-
-    For the definitions used to calculate the bulk parameters from the
-    variance density spectra, and a short description please refer to:
-
-    https://content.sofarocean.com/hubfs/Spotter%20product%20documentation%20page/wave-parameter-definitions.pdf
-
-
-Major Updates:
-
-    Author   | Date      | Firmware Version | Script updates
-    -----------------------------------------------------------------------
-    P.B.Smit | Feb, 2018 | 1.4.2            | firmware SHA verification
-    P.B.Smit | May, 2018 | 1.5.1            | Included IIR phase correction
-    P.B.Smit | June, 2019| 1.7.0            | Bulk parameter output
-    P.B.Smit | Oct, 2019 | 1.8.0            | SST Spotter update
-    various  | Dec, 2021 | 1.8.0+, 2.0.0+   | Spotter v3 update
-"""
-
-#
-# Implementation
-#----------------
-#
 import os
 import sys
+import argparse
+import time
+from glob import glob
 
-import numpy
+import numpy as np
+import pandas as pd
+from scipy import signal
+from scipy.io import savemat
+
+def parse_spotter_files( input_path = None , output_path=None, output_format='CSV',
+          spectra='all', lf_filter = False):
+    """ 
+    Combine selected SPOTTER output files  into CSV files. This 
+    routine is called by cli_main and that calls in succession the separate 
+    routines to concatenate, and parse files. 
+    """
+
+    #Check the version of Files
+    versions =  getVersions( input_path )
+
+    #The filetypes to concatenate
+    file_types = [
+        'FLT',
+        'SPC',
+        'SYS',
+        'LOC',
+        'GPS',
+        'SST',
+    ]
+
+    parsing = [
+        'FLT',
+        'SPC',
+        'LOC',
+        'SST',
+    ]
+
+    if any( [ version['number'] < 3 for version in versions ] ):
+        print("WARNING: This parser version no longer supports legacy SST files (firmware 1.12.x and below).")
+        print("         If you need to parse legacy SST files, please use the parser in the legacy/ subdirectory.")
+        print("Press enter to confirm (or q to quit):")
+        log_errors("Warned about skipping legacy SST parsing.")
+        answer = input()
+        if answer.lower() == 'q':
+            sys.exit(1)
+        for collection in file_types, parsing:
+            collection.remove('SST')
+
+    outFiles    = {'FLT':'displacement','SPC':'spectra','SYS':'system',
+                       'LOC':'location','GPS':'gps','SST':'sst'}
+
+    if input_path is None:
+        #
+        # If no path given, assume current directory
+        #
+        input_path = os.getcwd()
+        #
+    else:
+        #
+        input_path = os.path.abspath(input_path)
+        #    
+    
+    if output_path is None:
+        #
+        output_path = os.path.join(input_path, 'processed')
+        #
+    else:
+        output_path =  os.path.abspath(output_path)
+        #
+    #
+
+    #Which spectra to process
+    if spectra=='all':
+        #
+        outputSpectra = ['Szz','a1','b1','a2','b2','Sxx','Syy','Qxz','Qyz','Cxy']
+        #
+    else:
+        #
+        outputSpectra = [spectra]
+        #
+    #
+    #
+    # Loop over versions
+    outp = output_path
+    if len(versions) == 1:
+        # if there is only a single version- we allow all files to be parsed.
+        # this is a clutch to account for the fact that sys files are not
+        # guaranteed to be written. In general assuming everything is the
+        # same version seems safe- allowing to parse multiple different
+        # versions is perhaps something we want to stop supporting as it adds
+        # a lot of fragile logic.
+        versions[0]['fileNumbers'] = None
+
+    #
+    for index,version in enumerate(versions):
+        #
+        if len(versions) > 1:
+            #
+            # When there are multiple conflicting version, we push output
+            # to different subdirectories
+            #
+            output_path = os.path.join( outp,str(index) )
+            #
+        else:
+            #            
+            output_path = outp
+            #
+        #
+            
+        if not os.path.exists(output_path):
+            #
+            os.makedirs(output_path)
+            #
+        #            
+
+        for suffix in file_types:
+            #
+            fileName = os.path.join( output_path , outFiles[suffix] + '.csv' )
+            # 
+            # For each filetype, concatenate files to intermediate CSV files...
+
+            print( 'Concatenating all ' + suffix + ' files:')
+            if not (cat(path=input_path, outputFileType='CSV',Suffix=suffix,
+                    outputFileName=fileName,
+                    versionFileList=version['fileNumbers'])):
+                #
+                continue
+                #
+            #
+            
+            #
+            # ... once concatenated, process files further (if appropriate)
+            #
+            if suffix in parsing:
+                #
+                if suffix in [
+                    'FLT',
+                    'LOC',
+                    'GPS',
+                    'SST',
+                ]:
+                    #
+                    #parse the mean location/displacement files; 
+                    #this step transforms unix epoch to date string.
+                    #
+                    try:
+                        parseLocationFiles(inputFileName = fileName, kind=suffix,
+                            outputFileName = fileName,
+                            outputFileType=output_format,
+                            versionNumber=version['number'],
+                            IIRWeightType=version['IIRWeightType'])
+                    except OSError as e:
+                        print(f"Error in parseLocationFiles() while parsing {fileName}: {e}")
+                        raise
+                    #
+                elif suffix in ['SPC']:
+                    #
+                    #parse the mean location/displacement files; this step 
+                    #extract relevant spectra (Szz, Sxx etc.) from the bulk 
+                    #spectral file
+                    parseSpectralFiles(inputFileName = fileName,
+                                outputPath=output_path,
+                                outputFileType=output_format,
+                                outputSpectra=outputSpectra,
+                                lf_filter=lf_filter,
+                                versionNumber=version['number'])
+                    os.remove( fileName )
+                    #
+                #
+            #parsing
+            #
+        #suffix
+        #
+        # Generate bulk parameter file
+        spectrum = Spectrum(path=output_path,outpath=output_path)
+        spectrum.generate_text_file()
+    #Versions
+    #
+    print("Done. Processed data saved in : " + output_path )
+    return output_path
+
+class Spectrum:
+    _parser_files = {
+        'Szz':  'Szz.csv',
+        'a1':   'a1.csv',
+        'b1':   'b1.csv',
+        'Sxx':  'Sxx.csv',
+        'Syy':  'Syy.csv',
+        'Qxz':  'Qxz.csv',
+        'Qyz':  'Qyz.csv'
+    }
+    _toDeg = 180. / np.pi
+
+    def __init__(self,path,outpath):
+        self._file_available = {'Szz':False, 'a1':False, 'b1':False,}
+        self.path = path
+        self.outpath = outpath
+        self._data = {'Szz':None,'a1':None,'b1':None,'Sxx':None,'Syy':None,'Qxy':None,'Qyz':None}
+        self._none = None
+        self.time  = None
+        for key in self._parser_files:
+            #
+            # Check which output from the parser is available
+            if os.path.isfile(os.path.join(self.path,self._parser_files[key])):
+
+                self._file_available[key] = True
+
+            else:
+                self._file_available[key] = False
+
+        #Load a header file from the spectral data from the parser to get frequencies
+        self._load_header()
+        #Load the data from the parser
+        self._load_parser_output()
+
+    @property
+    def Szz(self):
+        return self._data['Szz']
+
+    @property
+    def a1(self):
+        return self._data['a1']
+
+    @property
+    def b1(self):
+        return self._data['b1']
+
+    def _Qyzm(self):
+        return np.mean( self._data['Qyz'],1 )
+
+    def _Qxzm(self):
+        return np.mean( self._data['Qxz'],1 )
+
+    def _Sxxm(self):
+        return np.mean( self._data['Sxx'],1 )
+
+    def _Syym(self):
+        return np.mean( self._data['Syy'],1 )
+
+    def _Szzm(self):
+        return np.mean( self._data['Szz'],1 )
+
+    @property
+    def f(self):
+        return self._frequencies
+
+    def _load_header(self):
+        for key in self._parser_files:
+            if self._file_available[key]:
+                with open(os.path.join(self.path,self._parser_files[key]),'r') as file:
+                    line = file.readline(  ).split(',')[8:]
+                    self._frequencies = np.array([float(x) for x in line])
+            break
+        else:
+            raise Exception('No spectral files available - please check the input directory')
+
+
+    def _load_parser_output( self ):
+        #
+        for key in self._parser_files:
+            if self._file_available[key]:
+                data = np.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
+
+                if data.ndim == 1:
+                    # If there is only 1 line in the file, we need to add a dimension to the data as numpy returns a
+                    # 1D array in this case.
+                    data = data[None,:]
+
+                self.time = data[ : , 0:8 ]
+                self._data[key] = data[:,8:]
+                mask = np.isnan( self._data[key] )
+                self._data[key][mask] = 0.
+                self._none = np.nan + np.zeros( self._data[key].shape )
+
+        for key in self._parser_files:
+            if not self._file_available[key]:
+                self._data[key] = self._none
+
+
+    def _moment(self , values ):
+        df = np.mean(np.diff( self.f))
+        E = self.Szz * values
+        jstart =3
+        return np.trapezoid(  E[:,jstart:],self.f[jstart:] ,1  )
+
+    def _weighted_moment(self , values ):
+        return self._moment( values ) / self._moment(1.)
+
+    @property
+    def a1m(self):
+        if self._file_available['Sxx']:
+            return self._Qxzm() / np.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
+        else:
+            return self._weighted_moment( self.a1 )
+
+    @property
+    def b1m(self):
+        if self._file_available['Sxx']:
+            return self._Qyzm() / np.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
+        else:
+            return self._weighted_moment( self.b1 )
+
+    def _peak_index(self):
+        return np.argmax( self.Szz,1 )
+
+    def _direction(self,a1,b1):
+        directions = 270 - np.arctan2( b1 , a1 ) * self._toDeg
+
+        for ii,direction in enumerate(directions):
+            if direction < 0:
+                direction = direction + 360
+
+            if direction > 360:
+                direction = direction - 360
+            directions[ii] = direction
+        return directions
+
+    def mean_direction(self):
+        return self._direction(self.a1m,self.b1m)
+
+    def _spread(self,a1,b1):
+        return np.sqrt(  2 - 2 * np.sqrt( a1**2 + b1**2 ) ) * self._toDeg
+
+    def mean_spread(self):
+        return self._spread(self.a1m,self.b1m )
+
+    def _get_peak_value(self, variable ):
+        maxloc = np.argmax( self.Szz,1 )
+
+        out = np.zeros( maxloc.shape )
+
+        if len(variable.shape) == 2:
+            for ii,index in enumerate( maxloc ):
+                out[ii] = variable[ ii,index ]
+        elif len(variable.shape) == 1:
+            for ii, index in enumerate(maxloc):
+                out[ii] = variable[index]
+
+        return out
+
+    def peak_direction(self):
+        a1 = self._get_peak_value( self.a1 )
+        b1 = self._get_peak_value( self.b1 )
+        return self._direction( a1,b1)
+
+    def peak_spreading(self):
+        a1 = self._get_peak_value( self.a1 )
+        b1 = self._get_peak_value( self.b1 )
+        return self._spread( a1,b1 )
+
+    def peak_frequency(self):
+        return self._get_peak_value( self.f )
+
+    def peak_period(self):
+        return 1. / self.peak_frequency()
+
+    def mean_period(self):
+        return 1. / self._weighted_moment( self.f )
+
+    def significant_wave_height(self):
+        return 4.*np.sqrt(self._moment( 1.))
+
+    def generate_text_file(self):
+        hm0   = self.significant_wave_height()
+        tm01  = self.mean_period()
+        tp    = self.peak_period()
+        dir   = self.mean_direction()
+        pdir  = self.peak_direction()
+        dspr  = self.mean_spread()
+        pdspr = self.peak_spreading()
+
+        with open(os.path.join( self.outpath,'bulkparameters.csv'),'w') as file:
+
+            header = "# year , month , day, hour ,min, sec, milisec , Significant Wave Height, Mean Period, Peak Period, Mean Direction, Peak Direction, Mean Spreading, Peak Spreading\n"
+            file.write(header)
+            format = '%d, ' * 7 + '%6.2f, ' * 6 + '%6.2f \n'
+            for ii in range( 0 , len(hm0)):
+                #
+                string = format % ( self.time[ii,0], self.time[ii,1],  self.time[ii,2],
+                                    self.time[ii,3],self.time[ii,4],self.time[ii,5],
+                                    self.time[ii,6],hm0[ii],tm01[ii],tp[ii],
+                                    dir[ii],pdir[ii],dspr[ii],pdspr[ii]  )
+                file.write( string )
 
 #'SHA <-> version-number' relation
 #(note that dual entry for 1.2.5/1.4.2 is due to update glitches)
@@ -201,397 +420,6 @@ defaultIIRWeightType = 0
 #
 applyPhaseCorrection                  = True
 applyPhaseCorrectionFromVersionNumber = 2
-    
-
-class Spectrum:
-    _parser_files = {
-        'Szz':  'Szz.csv',
-        'a1':   'a1.csv',
-        'b1':   'b1.csv',
-        'Sxx':  'Sxx.csv',
-        'Syy':  'Syy.csv',
-        'Qxz':  'Qxz.csv',
-        'Qyz':  'Qyz.csv'
-    }
-    _toDeg = 180. / numpy.pi
-
-    def __init__(self,path,outpath):
-        self._file_available = {'Szz':False, 'a1':False, 'b1':False,}
-        self.path = path
-        self.outpath = outpath
-        self._data = {'Szz':None,'a1':None,'b1':None,'Sxx':None,'Syy':None,'Qxy':None,'Qyz':None}
-        self._none = None
-        self.time  = None
-        for key in self._parser_files:
-            #
-            # Check which output from the parser is available
-            if os.path.isfile(os.path.join(self.path,self._parser_files[key])):
-
-                self._file_available[key] = True
-
-            else:
-                self._file_available[key] = False
-
-        #Load a header file from the spectral data from the parser to get frequencies
-        self._load_header()
-        #Load the data from the parser
-        self._load_parser_output()
-
-    @property
-    def Szz(self):
-        return self._data['Szz']
-
-    @property
-    def a1(self):
-        return self._data['a1']
-
-    @property
-    def b1(self):
-        return self._data['b1']
-
-    def _Qyzm(self):
-        import  numpy
-        return numpy.mean( self._data['Qyz'],1 )
-
-    def _Qxzm(self):
-        import  numpy
-        return numpy.mean( self._data['Qxz'],1 )
-
-    def _Sxxm(self):
-        import  numpy
-        return numpy.mean( self._data['Sxx'],1 )
-
-    def _Syym(self):
-        import  numpy
-        return numpy.mean( self._data['Syy'],1 )
-
-    def _Szzm(self):
-        import  numpy
-        return numpy.mean( self._data['Szz'],1 )
-
-    @property
-    def f(self):
-        return self._frequencies
-
-    def _load_header(self):
-        for key in self._parser_files:
-            if self._file_available[key]:
-                with open(os.path.join(self.path,self._parser_files[key]),'r') as file:
-                    line = file.readline(  ).split(',')[8:]
-                    self._frequencies = numpy.array([float(x) for x in line])
-            break
-        else:
-            raise Exception('No spectral files available - please make sure the script is in the same directory as the sd-card output')
-
-
-    def _load_parser_output( self ):
-        #
-        for key in self._parser_files:
-            if self._file_available[key]:
-                data = numpy.loadtxt( os.path.join(self.path,self._parser_files[key]) , delimiter=',' )
-
-                if data.ndim == 1:
-                    # If there is only 1 line in the file, we need to add a dimension to the data as numpy returns a
-                    # 1D array in this case.
-                    data = data[None,:]
-
-                self.time = data[ : , 0:8 ]
-                self._data[key] = data[:,8:]
-                mask = numpy.isnan( self._data[key] )
-                self._data[key][mask] = 0.
-                self._none = numpy.nan + numpy.zeros( self._data[key].shape )
-
-        for key in self._parser_files:
-            if not self._file_available[key]:
-                self._data[key] = self._none
-
-
-    def _moment(self , values ):
-        df = numpy.mean(numpy.diff( self.f))
-        E = self.Szz * values
-        jstart =3
-        return numpy.trapezoid(  E[:,jstart:],self.f[jstart:] ,1  )
-
-    def _weighted_moment(self , values ):
-        return self._moment( values ) / self._moment(1.)
-
-    @property
-    def a1m(self):
-        import  numpy
-        if self._file_available['Sxx']:
-            return self._Qxzm() / numpy.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
-        else:
-            return self._weighted_moment( self.a1 )
-
-    @property
-    def b1m(self):
-        if self._file_available['Sxx']:
-            return self._Qyzm() / numpy.sqrt( self._Szzm() * ( self._Sxxm() + self._Syym() ))
-        else:
-            return self._weighted_moment( self.b1 )
-
-    def _peak_index(self):
-        return numpy.argmax( self.Szz,1 )
-
-    def _direction(self,a1,b1):
-        directions = 270 - numpy.arctan2( b1 , a1 ) * self._toDeg
-
-        for ii,direction in enumerate(directions):
-            if direction < 0:
-                direction = direction + 360
-
-            if direction > 360:
-                direction = direction - 360
-            directions[ii] = direction
-        return directions
-
-    def mean_direction(self):
-        return self._direction(self.a1m,self.b1m)
-
-    def _spread(self,a1,b1):
-        return numpy.sqrt(  2 - 2 * numpy.sqrt( a1**2 + b1**2 ) ) * self._toDeg
-
-    def mean_spread(self):
-        return self._spread(self.a1m,self.b1m )
-
-    def _get_peak_value(self, variable ):
-        maxloc = numpy.argmax( self.Szz,1 )
-
-        out = numpy.zeros( maxloc.shape )
-
-        if len(variable.shape) == 2:
-            for ii,index in enumerate( maxloc ):
-                out[ii] = variable[ ii,index ]
-        elif len(variable.shape) == 1:
-            for ii, index in enumerate(maxloc):
-                out[ii] = variable[index]
-
-        return out
-
-    def peak_direction(self):
-        a1 = self._get_peak_value( self.a1 )
-        b1 = self._get_peak_value( self.b1 )
-        return self._direction( a1,b1)
-
-    def peak_spreading(self):
-        a1 = self._get_peak_value( self.a1 )
-        b1 = self._get_peak_value( self.b1 )
-        return self._spread( a1,b1 )
-
-    def peak_frequency(self):
-        return self._get_peak_value( self.f )
-
-    def peak_period(self):
-        return 1. / self.peak_frequency()
-
-    def mean_period(self):
-        return 1. / self._weighted_moment( self.f )
-
-    def significant_wave_height(self):
-        return 4.*numpy.sqrt(self._moment( 1.))
-
-    def generate_text_file(self):
-        hm0   = self.significant_wave_height()
-        tm01  = self.mean_period()
-        tp    = self.peak_period()
-        dir   = self.mean_direction()
-        pdir  = self.peak_direction()
-        dspr  = self.mean_spread()
-        pdspr = self.peak_spreading()
-
-        with open(os.path.join( self.outpath,'bulkparameters.csv'),'w') as file:
-
-            header = "# year , month , day, hour ,min, sec, milisec , Significant Wave Height, Mean Period, Peak Period, Mean Direction, Peak Direction, Mean Spreading, Peak Spreading\n"
-            file.write(header)
-            format = '%d, ' * 7 + '%6.2f, ' * 6 + '%6.2f \n'
-            for ii in range( 0 , len(hm0)):
-                #
-                string = format % ( self.time[ii,0], self.time[ii,1],  self.time[ii,2],
-                                    self.time[ii,3],self.time[ii,4],self.time[ii,5],
-                                    self.time[ii,6],hm0[ii],tm01[ii],tp[ii],
-                                    dir[ii],pdir[ii],dspr[ii],pdspr[ii]  )
-                file.write( string )
-                #
-            #
-        #
-
-def main( path = None , outpath=None, outputFileType='CSV',
-          spectra='all',suffixes=None,parsing=None,lfFilter=False,bulkParameters=True):
-    """ 
-    Combine selected SPOTTER output files  into CSV files. This 
-    routine is called by __main__ and that calls in succession the separate 
-    routines to concatenate, and parse files. 
-    """
-
-    #Check the version of Files
-    versions =  getVersions( path )
-
-    #The filetypes to concatenate
-    if suffixes is None:
-        suffixes = [
-            'FLT',
-            'SPC',
-            'SYS',
-            'LOC',
-            'GPS',
-            'SST',
-        ]
-
-    if parsing is None:
-        parsing = [
-            'FLT',
-            'SPC',
-            'LOC',
-            'SST',
-        ]
-
-    if any( [ version['number'] < 3 for version in versions ] ):
-        print("WARNING: This parser version no longer supports legacy SST files (firmware 1.12.x and below).")
-        print("         If you need to parse legacy SST files, please use the parser in the legacy/ subdirectory.")
-        print("Press enter to confirm (or q to quit):")
-        log_errors("Warned about skipping legacy SST parsing.")
-        answer = input()
-        if answer.lower() == 'q':
-            sys.exit(1)
-        for collection in suffixes, parsing:
-            collection.remove('SST')
-
-    outFiles    = {'FLT':'displacement','SPC':'spectra','SYS':'system',
-                       'LOC':'location','GPS':'gps','SST':'sst'}
-
-    if path is None:
-        #
-        # If no path given, assume current directory
-        #
-        path = os.getcwd()
-        #
-    else:
-        #
-        path = os.path.abspath(path)
-        #    
-    
-    if (outpath is None):
-        #
-        outpath = path
-        #
-    else:
-        outpath =  os.path.abspath(outpath)
-        #
-    #
-
-    #Which spectra to process
-    if spectra=='all':
-        #
-        outputSpectra = ['Szz','a1','b1','a2','b2','Sxx','Syy','Qxz','Qyz','Cxy']
-        #
-    else:
-        #
-        outputSpectra = [spectra]
-        #
-    #
-    #
-    # Loop over versions
-    outp = outpath
-    if len(versions) == 1:
-        # if there is only a single version- we allow all files to be parsed.
-        # this is a clutch to account for the fact that sys files are not
-        # guaranteed to be written. In general assuming everything is the
-        # same version seems safe- allowing to parse multiple different
-        # versions is perhaps something we want to stop supporting as it adds
-        # a lot of fragile logic.
-        versions[0]['fileNumbers'] = None
-
-    #
-    for index,version in enumerate(versions):
-        #
-        if len(versions) > 1:
-            #
-            # When there are multiple conflicting version, we push output
-            # to different subdirectories
-            #
-            outpath = os.path.join( outp,str(index) )
-            #
-        else:
-            #            
-            outpath = outp
-            #
-        #
-            
-        if not os.path.exists(outpath):
-            #
-            os.makedirs(outpath)
-            #
-        #            
-
-        for suffix in suffixes:
-            #
-            fileName = os.path.join( outpath , outFiles[suffix] + '.csv' )
-            # 
-            # For each filetype, concatenate files to intermediate CSV files...
-
-            print( 'Concatenating all ' + suffix + ' files:')
-            if not (cat(path=path, outputFileType='CSV',Suffix=suffix,
-                    outputFileName=fileName,
-                    versionFileList=version['fileNumbers'],
-                    compatibility_version=version['number'])
-                    ):
-                #
-                continue
-                #
-            #
-            
-            #
-            # ... once concatenated, process files further (if appropriate)
-            #
-            if suffix in parsing:
-                #
-                if suffix in [
-                    'FLT',
-                    'LOC',
-                    'GPS',
-                    'SST',
-                ]:
-                    #
-                    #parse the mean location/displacement files; 
-                    #this step transforms unix epoch to date string.
-                    #
-                    try:
-                        parseLocationFiles(inputFileName = fileName, kind=suffix,
-                            outputFileName = fileName,
-                            outputFileType=outputFileType,
-                            versionNumber=version['number'],
-                            IIRWeightType=version['IIRWeightType'])
-                    except OSError as e:
-                        print(f"Error in parseLocationFiles() while parsing {fileName}: {e}")
-                        raise
-                    #
-                elif suffix in ['SPC']:
-                    #
-                    #parse the mean location/displacement files; this step 
-                    #extract relevant spectra (Szz, Sxx etc.) from the bulk 
-                    #spectral file
-                    parseSpectralFiles(inputFileName = fileName,
-                                outputPath=outpath,
-                                outputFileType=outputFileType,
-                                outputSpectra=outputSpectra,lfFilter=lfFilter,
-                                versionNumber=version['number'])
-                    os.remove( fileName )
-                    #
-                #
-            #parsing
-            #
-        #suffix
-        #
-        # Generate bulk parameter file
-        if bulkParameters:
-            spectrum = Spectrum(path=outpath,outpath=outpath)
-            spectrum.generate_text_file()
-    #Versions
-    #
-    print("Done.")
-
-#end def
-
 
 def log_errors( error ):
     global First
@@ -612,8 +440,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
     a Spotter into one datastructure and saves the result as a CSV file 
     (*outputFileName*).
     """
-    import pandas as pd
-    import numpy as np
     #
 
     fname,ext = os.path.splitext(outputFileName)
@@ -726,18 +552,16 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         # To save to matlab .mat format we need scipy
         #
-        try:
-            import scipy
-            from scipy import io                
+        try:            
             #
             if kind=='FLT':
-                scipy.io.savemat( outputFileName ,
+                savemat( outputFileName ,
                     {'x':data[:,7].astype(np.float32),
                      'y':data[:,8].astype(np.float32),
                      'z':data[:,9].astype(np.float32),
                   'time':data[:,0:7].astype(np.int16)} )
             elif kind=='GPS':
-                scipy.io.savemat( outputFileName ,
+                savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
                      'Lon':data[:,8].astype(np.float32),
                      'elevation':data[:,9].astype(np.float32),
@@ -746,7 +570,7 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
                      'w':data[:,12].astype(np.float32),                     
                      'time':data[:,0:7].astype(np.int16)} )                
             else:
-                scipy.io.savemat( outputFileName ,
+                savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
                      'Lon':data[:,8].astype(np.float32),
                   'time':data[:,0:7].astype(np.int16)} )                
@@ -781,9 +605,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
 #end def
 
 def epochToDateArray( epochtime ):
-    #
-    import numpy as np
-    import time
     
     datetime   = np.array( [ list(time.gmtime(x))[0:6] for x in epochtime ])
     milis      = np.array( [ ( 1000 * (  x-np.floor(x) ) ) for x in epochtime ])
@@ -791,20 +612,22 @@ def epochToDateArray( epochtime ):
 #
     
 
-def parseSpectralFiles(   inputFileName=None, outputPath = None,
-                          outputFileNameDict = None,
-                          spectralDataSuffix='SPC', reportProgress=True      ,
-                          nf=128                  , df=0.009765625           ,
-                          outputSpectra=None      , outputFileType='CSV'     ,
-                          lfFilter=False,versionNumber=defaultVersion):
+def parseSpectralFiles( inputFileName=None, 
+                        outputPath = None,
+                        outputFileNameDict = None,
+                        reportProgress=True,
+                        nf=128, 
+                        df=0.009765625,
+                        outputSpectra=None, 
+                        outputFileType='CSV',
+                        lf_filter = False,
+                        versionNumber=defaultVersion):
 
     #
     # This functions loads all the Spectral data (located at *path*) from
     # a Spotter into one datastructure and saves the result as a CSV file
     # (*outputFileName*).
     #
-    import pandas as pd
-    import numpy as np
 
     def checkKeyNames(key,errorLocation):
         # Nested function to make sure input is insensitive to capitals,
@@ -940,7 +763,6 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
         #
         data[key][:,0:3] = np.nan
         #
-            
     # Calculate directional moments from data (if requested). Because these are
     # derived quantities these need to be included in the dataframe a-postiori
     if any( [ x in ['a1','b1','a2','b2'] for x in outputSpectra ] ):
@@ -966,9 +788,8 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
             data[key][ np.isnan(data[key] ) ]= np.nan
     #
 
-    if lfFilter:
-        #
-        # Filter lf-noise
+    # Filter lf-noise
+    if lf_filter:
         data = lowFrequencyFilter( data )
         #
     #
@@ -1011,11 +832,8 @@ def parseSpectralFiles(   inputFileName=None, outputPath = None,
             # To save to matlab .mat format we need scipy
             #
             try:
-                import scipy
-                from scipy import io                
-                #
                 mat = data[key]
-                scipy.io.savemat(
+                savemat(
                         os.path.join( outputPath , outputFileName[key]),
                         {'spec':mat[:,8:].astype(np.float32),
                         'time':mat[:,0:7].astype(np.int16),
@@ -1047,7 +865,6 @@ def lowFrequencyFilter( data ):
     '''
     function to perform the low-frequency filter
     '''   
-    import numpy as np
     #
     with np.errstate(invalid='ignore',divide='ignore'):
         # Ignore division by 0 etc (this is caught below)
@@ -1155,8 +972,7 @@ def extensions( outputFileType ):
         #
     else:
         #
-        raise Exception('Unknown outputFileType; options are:'
-                            + 'numpy , matlab , pickle , csv')
+        raise ValueError('Unknown outputFileType; options are: numpy , matlab , pickle , csv')
         #
     #
 #
@@ -1164,8 +980,7 @@ class missingFLTFile(Exception):
     pass
 
 def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
-             reportProgress=True, outputFileType='CSV',versionFileList=None,
-            compatibility_version=defaultVersion):
+             reportProgress=True, outputFileType='CSV',versionFileList=None, compatibilityVersion=defaultVersion):
     """
     This functions concatenates raw csv files with a header. Only for the first 
     file it retains the header. Note that for SPEC files special
@@ -1174,13 +989,13 @@ def cat( path = None, outputFileName = 'displacement.CSV', Suffix='FLT',
     import gzip
     #
 
-    def modeDetection( path , filename ):
+    def modeDetection( input_path , filename ):
         #
         # Here we detect if we are in debug or in production mode, we do this
         # based on the first few lines; in debug these will contain either
         # FFT or SPEC, whereas in production only SPECA is encountered
         mode = 'production'
-        with open(os.path.join( path,filename) ) as infile:
+        with open(os.path.join( input_path,filename) ) as infile:
             #
             jline = 0 
             for line in infile:
@@ -1524,64 +1339,72 @@ def getVersions( path ):
     #
     return version
 #
-def filterSOS(versionNumber,IIRWeightType):
-    #
-    import numpy as np
-    #second order-sections coeficients of the filter
-
+def filterSOS(versionNumber, IIRWeightType):
+    """
+    Get second-order sections coefficients for IIR filter based on version and weight type.
+    
+    Args:
+        versionNumber (int): Version number of the data format
+        IIRWeightType (int): Type of IIR weight (0=Type A, 1=Type B, 2=Type C)
+        
+    Returns:
+        numpy.ndarray or float: SOS coefficients matrix or 0 if unsupported
+        
+    Raises:
+        ValueError: If IIRWeightType is not valid for the given version
+        TypeError: If inputs are not numeric
+    """
+    
+    # Input validation
+    try:
+        versionNumber = int(versionNumber)
+        IIRWeightType = int(IIRWeightType)
+    except (ValueError, TypeError) as e:
+        raise TypeError(f"Version number and IIR weight type must be numeric. Got {type(versionNumber)}, {type(IIRWeightType)}")
+    
+    # Version 0 and below are not supported
     if versionNumber < 1:
-        #
-        sos =0.
-        return sos
-        #
-    elif versionNumber in [1,2,3]:
-        #
-        if IIRWeightType == 0:
-            #Type A
-            lp = {'a1': -1.8514229621,
-                  'a2':  0.8578089736,
-                  'b0': 0.8972684452 ,
-                  'b1': -1.7945369122 ,
-                  'b2': 0.8972684291  }             
-            hp = {'a1':-1.9318795385 ,
-                  'a2':0.9385430645 ,
-                  'b0':1.0000000000 ,
-                  'b1':-1.9999999768 ,
-                  'b2':1.0000000180 }          
-        elif IIRWeightType == 1:
-            #Type B           
-            lp = {'a1': 1.9999999964  ,
-                  'a2': 0.9999999964  ,
-                  'b0': 0.9430391609  ,
-                  'b1': -1.8860783217 ,
-                  'b2': 0.9430391609  }              
-            hp = {'a1':-1.8828311523,
-                  'a2':0.8893254984 ,
-                  'b0':1.0000000000 ,
-                  'b1':2.0000000000 ,
-                  'b2':1.0000000000 }            
-        elif IIRWeightType == 2:
-            #Type C         
-            lp = {'a1': 1.1375322034,
-                  'a2': 0.4141775928,
-                  'b0': 0.6012434213 ,
-                  'b1': -1.2024868427 ,
-                  'b2': 0.6012434213  }
-            hp = {'a1':-1.8827396569 ,
-                  'a2':0.8894088696  ,
-                  'b0':1.0000000000 ,
-                  'b1':2.0000000000 ,
-                  'b2':1.0000000000 }            
-        #
-    #
-    sos = [ [ lp['b0'],lp['b1'],lp['b2'],1.000000,lp['a1'],lp['a2'] ],
-            [ hp['b0'],hp['b1'],hp['b2'],1.000000,hp['a1'],hp['a2'] ] ]
-    sos = np.array( sos )
-    return sos
-            
+        return 0.0
+    
+    # Versions 1-3 are supported
+    if versionNumber in [1, 2, 3]:
+        # Define filter coefficients for each type
+        filter_configs = {
+            0: {  # Type A
+                'lp': {'a1': -1.8514229621, 'a2': 0.8578089736, 'b0': 0.8972684452, 'b1': -1.7945369122, 'b2': 0.8972684291},
+                'hp': {'a1': -1.9318795385, 'a2': 0.9385430645, 'b0': 1.0000000000, 'b1': -1.9999999768, 'b2': 1.0000000180}
+            },
+            1: {  # Type B
+                'lp': {'a1': 1.9999999964, 'a2': 0.9999999964, 'b0': 0.9430391609, 'b1': -1.8860783217, 'b2': 0.9430391609},
+                'hp': {'a1': -1.8828311523, 'a2': 0.8893254984, 'b0': 1.0000000000, 'b1': 2.0000000000, 'b2': 1.0000000000}
+            },
+            2: {  # Type C
+                'lp': {'a1': 1.1375322034, 'a2': 0.4141775928, 'b0': 0.6012434213, 'b1': -1.2024868427, 'b2': 0.6012434213},
+                'hp': {'a1': -1.8827396569, 'a2': 0.8894088696, 'b0': 1.0000000000, 'b1': 2.0000000000, 'b2': 1.0000000000}
+            }
+        }
+        
+        if IIRWeightType not in filter_configs:
+            raise ValueError(f"IIRWeightType {IIRWeightType} not supported for version {versionNumber}. Valid types: {list(filter_configs.keys())}")
+        
+        config = filter_configs[IIRWeightType]
+        lp, hp = config['lp'], config['hp']
+        
+        try:
+            # Build SOS matrix
+            sos = np.array([
+                [lp['b0'], lp['b1'], lp['b2'], 1.0, lp['a1'], lp['a2']],
+                [hp['b0'], hp['b1'], hp['b2'], 1.0, hp['a1'], hp['a2']]
+            ])
+            return sos
+        except Exception as e:
+            raise RuntimeError(f"Failed to create SOS matrix: {e}")
+    
+    else:
+        raise ValueError(f"Version {versionNumber} is not supported. Supported versions: 1, 2, 3")
+
+
 def applyfilter( data , kind , versionNumber, IIRWeightType ):
-    import numpy as np
-    from scipy import signal
     #
     # Apply forward/backward/filtfilt sos filter
     #
@@ -1618,28 +1441,46 @@ def applyfilter( data , kind , versionNumber, IIRWeightType ):
     return res
 
 First = True
-if __name__ == "__main__":
-    #
-    # execute only if run as a script
-    #
-    narg      = len( sys.argv[1:] )
+
+
+def cli_main():
+    """Command-line interface for the Spotter data parser."""
+    parser = argparse.ArgumentParser(
+        description="Parse and concatenate Spotter SD card data files",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python sd_file_parser.py /path/to/spotter/data
+  python sd_file_parser.py /path/to/data --output_path /path/to/results
+  python sd_file_parser.py /path/to/data --spectra all --format matlab
+        """
+    )
     
-    if narg>0:
-        #
-        #parse and check command line arguments
-        arguments = dict()
-        for argument in sys.argv[1:]:
-            #
-            key,val = validCommandLineArgument( argument )
-            arguments[key]=val            
-            #
-        #
-    else:
-        #
-        arguments = dict()
-        #
-    #
-    main(**arguments)
+    parser.add_argument('input_path', 
+                       help='Path to directory containing Spotter data files')
+    parser.add_argument('--output_path', '-o', 
+                       help='Output directory (default: input_path/processed)')
+    parser.add_argument('--format', choices=['CSV', 'matlab', 'numpy'], 
+                       default='CSV', help='Output file format')
+    parser.add_argument('--spectra', default='all',
+                       help='Spectra to process (e.g., Szz, all, or list)')
+    
+    args = parser.parse_args()
+    
+    # Set default output path
+    if args.output_path is None:
+        args.output_path = os.path.join(args.input_path, 'processed')
+    
+    # Call the actual processing function
+    parse_spotter_files(
+        input_path=args.input_path,
+        output_path=args.output_path,
+        output_format=args.format,
+        spectra=args.spectra
+    )
+
+if __name__ == '__main__':
+    cli_main()
 
 
 
