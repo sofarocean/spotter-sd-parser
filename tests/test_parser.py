@@ -145,6 +145,55 @@ class TestLocationParsing:
         with pytest.raises(TypeError):  
             parseLocationFiles( inputFileName = inputfn, output_path = output_dir )
 
+    def test_flt_include_n_channel_outputs_n_column(self, tmp_path):
+        inputfn = tmp_path / "test_flt.csv"
+        outputfn = tmp_path / "displacement.csv"
+        inputfn.write_text(
+            "millis,GPS_Epoch_Time(s),outx(mm),outy(mm),outz(mm),outn(mm)\n"
+            "0,1640995200.0,1000,2000,3000,4000\n",
+            encoding="utf-8",
+        )
+
+        parseLocationFiles(
+            inputFileName=str(inputfn),
+            kind='FLT',
+            outputFileName=str(outputfn),
+            include_n_channel=True,
+        )
+
+        assert outputfn.exists()
+        with open(outputfn, 'r', encoding='utf-8') as csvf:
+            header = csvf.readline()
+            firstline = csvf.readline()
+
+        assert "n (m)" in header
+        # Last 4 values are x,y,z,n converted from mm to m.
+        assert firstline.rstrip().endswith("1.00000e+00,2.00000e+00,3.00000e+00,4.00000e+00")
+
+    def test_flt_include_n_channel_missing_outn_falls_back(self, tmp_path):
+        inputfn = tmp_path / "test_flt_old.csv"
+        outputfn = tmp_path / "displacement_old.csv"
+        inputfn.write_text(
+            "millis,GPS_Epoch_Time(s),outx(mm),outy(mm),outz(mm)\n"
+            "0,1640995200.0,1000,2000,3000\n",
+            encoding="utf-8",
+        )
+
+        parseLocationFiles(
+            inputFileName=str(inputfn),
+            kind='FLT',
+            outputFileName=str(outputfn),
+            include_n_channel=True,
+        )
+
+        assert outputfn.exists()
+        with open(outputfn, 'r', encoding='utf-8') as csvf:
+            header = csvf.readline()
+            firstline = csvf.readline()
+
+        assert "n (m)" not in header
+        assert firstline.rstrip().endswith("1.00000e+00,2.00000e+00,3.00000e+00")
+
 class TestParseSpotterData:
     """Tests for the process_spotter_data function."""
     
@@ -254,6 +303,26 @@ class TestCLI:
                     output_format='matlab',
                     spectra='all'
                 )
+
+    def test_cli_with_include_n_channels(self):
+        test_args = [
+            'sd_file_parser.py',
+            '/input/path',
+            '--include_n_channels',
+        ]
+
+        with patch('sys.argv', test_args):
+            with patch('sd_file_parser.parse_spotter_files') as mock_process:
+                with patch('os.path.join') as mock_join:
+                    mock_join.return_value = '/input/path/processed'
+                    cli_main()
+                    mock_process.assert_called_once_with(
+                        input_path='/input/path',
+                        output_path='/input/path/processed',
+                        output_format='CSV',
+                        spectra='all',
+                        include_n_channels=True,
+                    )
 
 
 class TestParseSpectralFiles:

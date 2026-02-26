@@ -10,7 +10,7 @@ from scipy import signal
 from scipy.io import savemat
 
 def parse_spotter_files( input_path = None , output_path=None, output_format='CSV',
-          spectra='all', lf_filter = False):
+          spectra='all', lf_filter = False, include_n_channels=False):
     """ 
     Combine selected SPOTTER output files  into CSV files. This 
     routine is called by cli_main and that calls in succession the separate 
@@ -149,6 +149,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
                         parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
                             outputFileType=output_format,
+                            include_n_channel=include_n_channels,
                             versionNumber=version['number'],
                             IIRWeightType=version['IIRWeightType'])
                     except OSError as e:
@@ -434,7 +435,8 @@ def log_errors( error ):
 
 def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
          kind='FLT', reportProgress=True, outputFileType='CSV',
-        versionNumber=defaultVersion,IIRWeightType=defaultIIRWeightType ):
+        versionNumber=defaultVersion,IIRWeightType=defaultIIRWeightType,
+        include_n_channel=False ):
     """
     This functions loads all the gps-location data (located at *path*) from
     a Spotter into one datastructure and saves the result as a CSV file 
@@ -459,30 +461,60 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         # Read the data using pandas, and convert to numpy
         #
-        data = pd.read_csv( inputFileName ,
-                index_col=False , usecols=(1,2,3,4) )
+        usecols = (1,2,3,4)
+        if include_n_channel:
+            try:
+                data = pd.read_csv(
+                    inputFileName,
+                    index_col=False,
+                    usecols=(1,2,3,4,5),
+                )
+            except ValueError:
+                print("WARNING: include_n_channel requested, but outn(mm) was not found. Continuing without n channel.")
+                data = pd.read_csv(
+                    inputFileName,
+                    index_col=False,
+                    usecols=usecols,
+                )
+                include_n_channel = False
+        else:
+            data = pd.read_csv(
+                inputFileName,
+                index_col=False,
+                usecols=usecols,
+            )
+
         data = data.apply(pd.to_numeric,errors='coerce')
         data = data.values
 
         msk = np.isnan( data[:,0] ) | np.isnan( data[:,1] ) | np.isnan( data[:,2] ) | np.isnan( data[:,3] )
         data = data[~msk,:]
         datetime    = epochToDateArray(data[:,0])
-        data        = data[:,1:4]/1000.
+        if include_n_channel:
+            data = data[:,1:5]/1000.
+            n_dims = 4
+        else:
+            data = data[:,1:4]/1000.
+            n_dims = 3
         #
         # Apply phase correction to displacement data
         #
         if applyPhaseCorrection and versionNumber>=applyPhaseCorrectionFromVersionNumber:
             #
             print('- IIR phase correction using weight type: ', str(IIRWeightType ) )
-            for ii in range(0,3):
+            for ii in range(0,n_dims):
                 #
                 data[:,ii] = applyfilter( data[:,ii] , 'backward' , versionNumber, IIRWeightType )
                 #
             #        
         data        = np.concatenate( (datetime,data) , axis=1 )
-            
-        fmt = '%i,'*7  + '%.5e,%.5e,%.5e'
-        header=header+', x (m), y(m), z(m)'
+
+        if include_n_channel:
+            fmt = '%i,'*7  + '%.5e,%.5e,%.5e,%.5e'
+            header=header+', x (m), y(m), z(m), n (m)'
+        else:
+            fmt = '%i,'*7  + '%.5e,%.5e,%.5e'
+            header=header+', x (m), y(m), z(m)'
     elif kind=='SST':
         #
         # Read the data using pandas, and convert to numpy
@@ -555,11 +587,15 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         try:            
             #
             if kind=='FLT':
-                savemat( outputFileName ,
-                    {'x':data[:,7].astype(np.float32),
-                     'y':data[:,8].astype(np.float32),
-                     'z':data[:,9].astype(np.float32),
-                  'time':data[:,0:7].astype(np.int16)} )
+                matlab_data = {
+                    'x':data[:,7].astype(np.float32),
+                    'y':data[:,8].astype(np.float32),
+                    'z':data[:,9].astype(np.float32),
+                    'time':data[:,0:7].astype(np.int16),
+                }
+                if include_n_channel and data.shape[1] > 10:
+                    matlab_data['n'] = data[:,10].astype(np.float32)
+                savemat(outputFileName, matlab_data)
             elif kind=='GPS':
                 savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
@@ -584,11 +620,15 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         if kind=='FLT':
             #
-            np.savez( outputFileName ,
-                x=data[:,7].astype(np.float32),
-                y=data[:,8].astype(np.float32),
-                z=data[:,9].astype(np.float32),
-                time=data[:,0:7].astype(np.int16) )
+            np_data = {
+                'x':data[:,7].astype(np.float32),
+                'y':data[:,8].astype(np.float32),
+                'z':data[:,9].astype(np.float32),
+                'time':data[:,0:7].astype(np.int16),
+            }
+            if include_n_channel and data.shape[1] > 10:
+                np_data['n'] = data[:,10].astype(np.float32)
+            np.savez(outputFileName, **np_data)
             #
         else:
             #
@@ -1464,6 +1504,8 @@ Examples:
                        default='CSV', help='Output file format')
     parser.add_argument('--spectra', default='all',
                        help='Spectra to process (e.g., Szz, all, or list)')
+    parser.add_argument('--include_n_channels', action='store_true',
+                       help='Include n displacement/spectral channels when present in raw files')
     
     args = parser.parse_args()
     
@@ -1472,15 +1514,18 @@ Examples:
         args.output_path = os.path.join(args.input_path, 'processed')
     
     # Call the actual processing function
-    parse_spotter_files(
+    parse_kwargs = dict(
         input_path=args.input_path,
         output_path=args.output_path,
         output_format=args.format,
-        spectra=args.spectra
+        spectra=args.spectra,
     )
+    if args.include_n_channels:
+        parse_kwargs['include_n_channels'] = True
+
+    parse_spotter_files(**parse_kwargs)
 
 if __name__ == '__main__':
     cli_main()
-
 
 
