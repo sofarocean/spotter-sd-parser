@@ -75,6 +75,8 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
     if spectra=='all':
         #
         outputSpectra = ['Szz','a1','b1','a2','b2','Sxx','Syy','Qxz','Qyz','Cxy']
+        if include_n_channels:
+            outputSpectra.extend(['Snn', 'Czn'])
         #
     else:
         #
@@ -166,6 +168,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
                                 outputFileType=output_format,
                                 outputSpectra=outputSpectra,
                                 lf_filter=lf_filter,
+                                include_n_channels=include_n_channels,
                                 versionNumber=version['number'])
                     os.remove( fileName )
                     #
@@ -661,6 +664,7 @@ def parseSpectralFiles( inputFileName=None,
                         outputSpectra=None, 
                         outputFileType='CSV',
                         lf_filter = False,
+                        include_n_channels=False,
                         versionNumber=defaultVersion):
 
     #
@@ -690,6 +694,10 @@ def parseSpectralFiles( inputFileName=None,
             out = 'Cxy'                
         elif key.lower() in ['qxy','qyx']:
             out = 'Qxy'
+        elif key.lower() == 'snn':
+            out = 'Snn'
+        elif key.lower() in ['czn','cnz']:
+            out = 'Czn'
         elif key.lower() in ['a1','b1','a2','b2']:
             out = key.lower()
         else:
@@ -700,6 +708,7 @@ def parseSpectralFiles( inputFileName=None,
     outputFileName= {'Szz':'Szz.CSV','Cxz':'Cxz.CSV','Qxz':'Qxz.CSV',
                      'Cyz':'Cyz.CSV','Qyz':'Qyz.CSV','Cxy':'Cxy.CSV',
                      'Qxy':'Qxy.CSV','Syy':'Syy.CSV','Sxx':'Sxx.CSV',
+                     'Snn':'Snn.CSV','Czn':'Czn.CSV',
                      'a1':'a1.CSV','b2':'b2.CSV','b1':'b1.CSV','a2':'a2.CSV'}
 
     
@@ -746,44 +755,90 @@ def parseSpectralFiles( inputFileName=None,
         print('Processing Spotter spectral output')
         #
     #
-    if versionNumber in [0,2,3]:
-        startColumnNumber = {'Szz':5  ,'Cxz':7,
+    legacyStartColumnNumber = {'Szz':5  ,'Cxz':7,
                          'Qxz':13,'Cyz':8,
                          'Qyz':14,'Sxx':3,
                          'Syy':4,  'Cxy':6,
                          'Qxy':12}
-        stride = 12
-    else:
-        #
-        # Column ordering changed from v1.4.1 onwards; extra columns due
-        # to cross-correlation filter between z and w
-        #
-        # Column order is now:
-        #
-        #   type,millis,[0] t0_GPS_Epoch_Time(s), [1] tN_GPS_Epoch_Time(s), 
-        #   [2] ens_count, [3] Sxx_re, [4] Syy_re, [5] Szz_re,[6] Snn_re,
-        #   [7] Sxy_re,[8] Szx_re,[9] Szy_re,[10] Szn_re,[11] Sxx_im,
-        #   [12] Syy_im,[13] Szz_im,[14] Snn_im,[15] Sxy_im,[16] Szx_im,
-        #   [17] Szy_im,[18] Szn_im
-        #
-        # Note that since first two columns are ignorded counting starts from 0
-        # at t0_GPS_Epoch_Time(s)
-        #
-        startColumnNumber = {'Szz':5  ,'Cxz':8,
+    # Column ordering changed from v1.4.1 onwards; extra columns due
+    # to cross-correlation filter between z and w.
+    extendedStartColumnNumber = {'Szz':5  ,'Cxz':8,
                             'Qxz':16,'Cyz':9,
                             'Qyz':17,'Sxx':3,
                             'Syy':4,  'Cxy':7,
                             'Qxy':15, 'Snn':6,
                             'Czn':10, 'Qzn':18}
+
+    def detect_spc_layout(path):
+        # Detect spectral layout from actual data rows. This is more reliable
+        # than using firmware version when logs contain mixed file formats.
+        import csv
+        max_columns = 0
+        with open(path, newline='') as f:
+            reader = csv.reader(f)
+            for idx, row in enumerate(reader):
+                if idx == 0:
+                    continue
+                if len(row) > max_columns:
+                    max_columns = len(row)
+                if idx >= 200:
+                    break
+        if max_columns >= 5 + 16 * nf:
+            return 'extended'
+        if max_columns >= 5 + 12 * nf:
+            return 'legacy'
+        return None
+
+    layout = detect_spc_layout(inputFileName)
+    if layout == 'extended':
+        startColumnNumber = extendedStartColumnNumber
         stride = 16
-        #
-    #
+    elif layout == 'legacy':
+        startColumnNumber = legacyStartColumnNumber
+        stride = 12
+    elif versionNumber in [0,2,3]:
+        startColumnNumber = legacyStartColumnNumber
+        stride = 12
+    else:
+        startColumnNumber = extendedStartColumnNumber
+        stride = 16
+
+    if not include_n_channels:
+        gated_n_channels = {'Snn', 'Czn'}
+        filtered = []
+        for key in outputSpectra:
+            if key in gated_n_channels:
+                print(f"WARNING: skipping {key} because include_n_channels is disabled.")
+                continue
+            filtered.append(key)
+        outputSpectra = filtered
+
+    available_output = set(startColumnNumber.keys()) | {'a1', 'a2', 'b1', 'b2'}
+    filtered = []
+    for key in outputSpectra:
+        if key not in available_output:
+            print(f"WARNING: requested spectrum {key} is not available in this file format/version; skipping.")
+            continue
+        filtered.append(key)
+    outputSpectra = filtered
+
+    if len(outputSpectra) == 0:
+        print("WARNING: no spectral outputs selected after filtering.")
+        return None
+
     # Read csv file using Pandas - this is the only section in the code
     # still reliant on Pandas, and only there due to supposed performance
     # benefits.
-    tmp = pd.read_csv( inputFileName ,
-                index_col=False , skiprows=[0],  header=None,
-                    usecols=tuple(range(2,5+stride*nf)) )
+    # Provide explicit names so mixed-width spectral rows can be parsed when
+    # a file contains both legacy and extended layouts.
+    tmp = pd.read_csv(
+        inputFileName,
+        index_col=False,
+        skiprows=[0],
+        header=None,
+        names=list(range(5 + stride * nf)),
+        usecols=tuple(range(2, 5 + stride * nf)),
+    )
     
     # Ensure the dataframe is numeric, coerce any occurences of bad data
     # (strings etc) to NaN and return a numpy numerica array
@@ -1527,5 +1582,3 @@ Examples:
 
 if __name__ == '__main__':
     cli_main()
-
-

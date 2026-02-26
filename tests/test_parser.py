@@ -327,6 +327,22 @@ class TestCLI:
 
 class TestParseSpectralFiles:
     """Tests for parseSpectralFiles function."""
+
+    @staticmethod
+    def _write_minimal_spc_csv(path, nf=4, stride=16):
+        # parseSpectralFiles reads columns 2..(5+stride*nf-1), so we create
+        # enough columns to satisfy that usecols slice.
+        total_cols = 5 + stride * nf
+        row = ["0"] * total_cols
+        row[2] = "1640995200.0"  # t0_GPS_Epoch_Time(s)
+        row[4] = "1"             # ens_count
+        # Fill spectrum values with non-zero numeric data.
+        for i in range(5, total_cols):
+            row[i] = str(i)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("header\n")
+            f.write(",".join(row) + "\n")
     
     def test_ExplicitOutputParserRun(self, test_setup):
         """
@@ -355,6 +371,78 @@ class TestParseSpectralFiles:
         # did the output file get created?
         # only Szz gets created by default (see lines 827-829)
         assert os.path.exists(os.path.join(output_path, 'Szz.csv'))
+
+    def test_include_n_channels_outputs_snn_and_czn(self, tmp_path):
+        inputfn = tmp_path / "spc_new.csv"
+        output_path = tmp_path / "out"
+        output_path.mkdir(parents=True, exist_ok=True)
+        self._write_minimal_spc_csv(str(inputfn), nf=4, stride=16)
+
+        parseSpectralFiles(
+            inputFileName=str(inputfn),
+            outputPath=str(output_path),
+            outputSpectra=['Snn', 'Czn'],
+            nf=4,
+            include_n_channels=True,
+            versionNumber=4,
+        )
+
+        assert os.path.exists(output_path / "Snn.csv")
+        assert os.path.exists(output_path / "Czn.csv")
+
+    def test_include_n_channels_skips_when_unavailable(self, tmp_path, capsys):
+        inputfn = tmp_path / "spc_old.csv"
+        output_path = tmp_path / "out_old"
+        output_path.mkdir(parents=True, exist_ok=True)
+        # Old format uses stride 12.
+        self._write_minimal_spc_csv(str(inputfn), nf=4, stride=12)
+
+        parseSpectralFiles(
+            inputFileName=str(inputfn),
+            outputPath=str(output_path),
+            outputSpectra=['Szz', 'Snn', 'Czn'],
+            nf=4,
+            include_n_channels=True,
+            versionNumber=3,
+        )
+
+        captured = capsys.readouterr()
+        assert "not available" in captured.out.lower()
+        assert os.path.exists(output_path / "Szz.csv")
+        assert not os.path.exists(output_path / "Snn.csv")
+        assert not os.path.exists(output_path / "Czn.csv")
+
+    def test_include_n_channels_with_mixed_row_widths(self, tmp_path):
+        inputfn = tmp_path / "spc_mixed.csv"
+        output_path = tmp_path / "out_mixed"
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        legacy_total_cols = 5 + 12 * 4
+        extended_total_cols = 5 + 16 * 4
+        legacy_row = ["0"] * legacy_total_cols
+        extended_row = ["0"] * extended_total_cols
+        for row in (legacy_row, extended_row):
+            row[2] = "1640995200.0"
+            row[4] = "1"
+            for i in range(5, len(row)):
+                row[i] = str(i)
+
+        with open(inputfn, "w", encoding="utf-8") as f:
+            f.write("header\n")
+            f.write(",".join(legacy_row) + "\n")
+            f.write(",".join(extended_row) + "\n")
+
+        parseSpectralFiles(
+            inputFileName=str(inputfn),
+            outputPath=str(output_path),
+            outputSpectra=['Snn', 'Czn'],
+            nf=4,
+            include_n_channels=True,
+            versionNumber=3,
+        )
+
+        assert os.path.exists(output_path / "Snn.csv")
+        assert os.path.exists(output_path / "Czn.csv")
 
 
 # Integration tests
