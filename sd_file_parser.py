@@ -730,7 +730,7 @@ def parseSpectralFiles( inputFileName=None,
         #
     #
         
-    # The output  files given by the script; per defauly only Szz is given, but
+    # The output files given by the script; per default only Szz is given, but
     # can be altered by user request
     if outputSpectra is None:
         #
@@ -770,8 +770,7 @@ def parseSpectralFiles( inputFileName=None,
                             'Czn':10, 'Qzn':18}
 
     def detect_spc_layout(path):
-        # Detect spectral layout from actual data rows. This is more reliable
-        # than using firmware version when logs contain mixed file formats.
+        # Detect spectral layout from actual data rows.
         import csv
         max_columns = 0
         with open(path, newline='') as f:
@@ -796,9 +795,6 @@ def parseSpectralFiles( inputFileName=None,
     elif layout == 'legacy':
         startColumnNumber = legacyStartColumnNumber
         stride = 12
-    elif versionNumber in [0,2,3]:
-        startColumnNumber = legacyStartColumnNumber
-        stride = 12
     else:
         startColumnNumber = extendedStartColumnNumber
         stride = 16
@@ -821,10 +817,6 @@ def parseSpectralFiles( inputFileName=None,
             continue
         filtered.append(key)
     outputSpectra = filtered
-
-    if len(outputSpectra) == 0:
-        print("WARNING: no spectral outputs selected after filtering.")
-        return None
 
     # Read csv file using Pandas - this is the only section in the code
     # still reliant on Pandas, and only there due to supposed performance
