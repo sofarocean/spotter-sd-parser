@@ -664,7 +664,7 @@ def parseSpectralFiles( inputFileName=None,
                         outputSpectra=None, 
                         outputFileType='CSV',
                         lf_filter = False,
-                        include_n_channels=False,
+                        include_n_channel=False,
                         versionNumber=defaultVersion):
 
     #

@@ -304,11 +304,11 @@ class TestCLI:
                     spectra='all'
                 )
 
-    def test_cli_with_include_n_channels(self):
+    def test_cli_with_include_n_channel(self):
         test_args = [
             'sd_file_parser.py',
             '/input/path',
-            '--include_n_channels',
+            '--include_n_channel',
         ]
 
         with patch('sys.argv', test_args):
@@ -321,7 +321,7 @@ class TestCLI:
                         output_path='/input/path/processed',
                         output_format='CSV',
                         spectra='all',
-                        include_n_channels=True,
+                        include_n_channel=True,
                     )
 
 
@@ -372,7 +372,7 @@ class TestParseSpectralFiles:
         # only Szz gets created by default (see lines 827-829)
         assert os.path.exists(os.path.join(output_path, 'Szz.csv'))
 
-    def test_include_n_channels_outputs_snn_and_czn(self, tmp_path):
+    def test_include_n_channel_outputs_snn_and_czn(self, tmp_path):
         inputfn = tmp_path / "spc_new.csv"
         output_path = tmp_path / "out"
         output_path.mkdir(parents=True, exist_ok=True)
@@ -383,14 +383,14 @@ class TestParseSpectralFiles:
             outputPath=str(output_path),
             outputSpectra=['Snn', 'Czn'],
             nf=4,
-            include_n_channels=True,
+            include_n_channel=True,
             versionNumber=4,
         )
 
         assert os.path.exists(output_path / "Snn.csv")
         assert os.path.exists(output_path / "Czn.csv")
 
-    def test_include_n_channels_skips_when_unavailable(self, tmp_path, capsys):
+    def test_include_n_channel_skips_when_unavailable(self, tmp_path, capsys):
         inputfn = tmp_path / "spc_old.csv"
         output_path = tmp_path / "out_old"
         output_path.mkdir(parents=True, exist_ok=True)
@@ -402,7 +402,7 @@ class TestParseSpectralFiles:
             outputPath=str(output_path),
             outputSpectra=['Szz', 'Snn', 'Czn'],
             nf=4,
-            include_n_channels=True,
+            include_n_channel=True,
             versionNumber=3,
         )
 
@@ -412,7 +412,7 @@ class TestParseSpectralFiles:
         assert not os.path.exists(output_path / "Snn.csv")
         assert not os.path.exists(output_path / "Czn.csv")
 
-    def test_include_n_channels_with_mixed_row_widths(self, tmp_path):
+    def test_include_n_channel_with_mixed_row_widths(self, tmp_path):
         inputfn = tmp_path / "spc_mixed.csv"
         output_path = tmp_path / "out_mixed"
         output_path.mkdir(parents=True, exist_ok=True)
@@ -437,7 +437,7 @@ class TestParseSpectralFiles:
             outputPath=str(output_path),
             outputSpectra=['Snn', 'Czn'],
             nf=4,
-            include_n_channels=True,
+            include_n_channel=True,
             versionNumber=3,
         )
 
