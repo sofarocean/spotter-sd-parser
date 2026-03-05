@@ -575,7 +575,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         header=header+', latitude (decimal degrees),longitude (decimal degrees)'
         #
     #
-
     if outputFileType.lower() in ['csv','gz']:
         #
         np.savetxt(outputFileName ,
@@ -590,13 +589,14 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         try:            
             #
             if kind=='FLT':
+                n_filt_cols_no_n = 10
                 matlab_data = {
                     'x':data[:,7].astype(np.float32),
                     'y':data[:,8].astype(np.float32),
                     'z':data[:,9].astype(np.float32),
                     'time':data[:,0:7].astype(np.int16),
                 }
-                if include_n_channel and data.shape[1] > 10:
+                if include_n_channel and data.shape[1] == n_filt_cols_no_n + 1:
                     matlab_data['n'] = data[:,10].astype(np.float32)
                 savemat(outputFileName, matlab_data)
             elif kind=='GPS':
@@ -769,6 +769,10 @@ def parseSpectralFiles( inputFileName=None,
                             'Qxy':15, 'Snn':6,
                             'Czn':10, 'Qzn':18}
 
+    n_header_columns = 5 # type, millis, t0 epoch time, tN epoch time, ensemble number
+    n_legacy_spectra = 6 #sxx, syy, szz, sxy, sxz, syz
+    n_extended_spectra = 8 #sxx, syy, szz, snn, sxy, sxz, syz, szn
+
     def detect_spc_layout(path):
         # Detect spectral layout from actual data rows.
         import csv
@@ -782,25 +786,29 @@ def parseSpectralFiles( inputFileName=None,
                     max_columns = len(row)
                 if idx >= 200:
                     break
-        if max_columns >= 5 + 16 * nf:
+        if max_columns >= n_header_columns + 2 * n_extended_spectra * nf: #factor of 2 for imaginary part of spectra
             return 'extended'
-        if max_columns >= 5 + 12 * nf:
+        if max_columns >= n_header_columns + 2 * n_legacy_spectra * nf:
             return 'legacy'
+        else:
+            print(f"WARNING: unknown spectral layout in file {path}")
         return None
 
     layout = detect_spc_layout(inputFileName)
     if layout == 'extended':
         startColumnNumber = extendedStartColumnNumber
-        stride = 16
+        num_spectra = n_extended_spectra # auto-, co-, and cross-spectra for four channels (x, y, z, and n)
     elif layout == 'legacy':
         startColumnNumber = legacyStartColumnNumber
-        stride = 12
+        num_spectra = n_legacy_spectra # auto-, co-, and cross-spectra for three channels (x, y, and z)
     elif versionNumber in [0,2,3]: #default to version number for identifying start column number
         startColumnNumber = legacyStartColumnNumber
-        stride = 12
+        num_spectra = n_legacy_spectra
     else:
         startColumnNumber = extendedStartColumnNumber
-        stride = 16
+        num_spectra = n_extended_spectra
+
+    stride = 2 * num_spectra # SPC files hold both real and imaginary parts of spectra, so stride is 2x number of spectra
 
     if not include_n_channel:
         gated_n_channels = {'Snn', 'Czn'}
