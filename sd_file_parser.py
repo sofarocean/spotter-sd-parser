@@ -10,7 +10,7 @@ from scipy import signal
 from scipy.io import savemat
 
 def parse_spotter_files( input_path = None , output_path=None, output_format='CSV',
-          spectra='all', lf_filter = False, include_n_channels=False):
+          spectra='all', lf_filter = False, include_n_channel=False):
     """ 
     Combine selected SPOTTER output files  into CSV files. This 
     routine is called by cli_main and that calls in succession the separate 
@@ -75,7 +75,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
     if spectra=='all':
         #
         outputSpectra = ['Szz','a1','b1','a2','b2','Sxx','Syy','Qxz','Qyz','Cxy']
-        if include_n_channels:
+        if include_n_channel:
             outputSpectra.extend(['Snn', 'Czn'])
         #
     else:
@@ -151,7 +151,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
                         parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
                             outputFileType=output_format,
-                            include_n_channel=include_n_channels,
+                            include_n_channel=include_n_channel,
                             versionNumber=version['number'],
                             IIRWeightType=version['IIRWeightType'])
                     except OSError as e:
@@ -168,7 +168,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
                                 outputFileType=output_format,
                                 outputSpectra=outputSpectra,
                                 lf_filter=lf_filter,
-                                include_n_channels=include_n_channels,
+                                include_n_channel=include_n_channel,
                                 versionNumber=version['number'])
                     os.remove( fileName )
                     #
@@ -795,16 +795,19 @@ def parseSpectralFiles( inputFileName=None,
     elif layout == 'legacy':
         startColumnNumber = legacyStartColumnNumber
         stride = 12
+    elif versionNumber in [0,2,3]: #default to version number for identifying start column number
+        startColumnNumber = legacyStartColumnNumber
+        stride = 12
     else:
         startColumnNumber = extendedStartColumnNumber
         stride = 16
 
-    if not include_n_channels:
+    if not include_n_channel:
         gated_n_channels = {'Snn', 'Czn'}
         filtered = []
         for key in outputSpectra:
             if key in gated_n_channels:
-                print(f"WARNING: skipping {key} because include_n_channels is disabled.")
+                print(f"WARNING: skipping {key} because include_n_channel is disabled.")
                 continue
             filtered.append(key)
         outputSpectra = filtered
@@ -1551,7 +1554,7 @@ Examples:
                        default='CSV', help='Output file format')
     parser.add_argument('--spectra', default='all',
                        help='Spectra to process (e.g., Szz, all, or list)')
-    parser.add_argument('--include_n_channels', action='store_true',
+    parser.add_argument('--include_n_channel', action='store_true',
                        help='Include n displacement/spectral channels when present in raw files')
     
     args = parser.parse_args()
@@ -1567,8 +1570,8 @@ Examples:
         output_format=args.format,
         spectra=args.spectra,
     )
-    if args.include_n_channels:
-        parse_kwargs['include_n_channels'] = True
+    if args.include_n_channel:
+        parse_kwargs['include_n_channel'] = True
 
     parse_spotter_files(**parse_kwargs)
 
