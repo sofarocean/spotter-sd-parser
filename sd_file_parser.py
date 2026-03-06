@@ -786,9 +786,9 @@ def parseSpectralFiles( inputFileName=None,
                     max_columns = len(row)
                 if idx >= 200:
                     break
-        if max_columns >= n_header_columns + 2 * n_extended_spectra * nf: #factor of 2 for imaginary part of spectra
+        if max_columns == n_header_columns + 2 * n_extended_spectra * nf: #factor of 2 for imaginary part of spectra
             return 'extended'
-        if max_columns >= n_header_columns + 2 * n_legacy_spectra * nf:
+        if max_columns == n_header_columns + 2 * n_legacy_spectra * nf:
             return 'legacy'
         else:
             print(f"WARNING: unknown spectral layout in file {path}")
