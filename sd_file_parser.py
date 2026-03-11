@@ -10,7 +10,7 @@ from scipy import signal
 from scipy.io import savemat
 
 def parse_spotter_files( input_path = None , output_path=None, output_format='CSV',
-          spectra='all', lf_filter = False):
+          spectra='all', lf_filter = False, include_n_channel=False):
     """ 
     Combine selected SPOTTER output files  into CSV files. This 
     routine is called by cli_main and that calls in succession the separate 
@@ -75,6 +75,8 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
     if spectra=='all':
         #
         outputSpectra = ['Szz','a1','b1','a2','b2','Sxx','Syy','Qxz','Qyz','Cxy']
+        if include_n_channel:
+            outputSpectra.extend(['Snn', 'Czn'])
         #
     else:
         #
@@ -149,6 +151,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
                         parseLocationFiles(inputFileName = fileName, kind=suffix,
                             outputFileName = fileName,
                             outputFileType=output_format,
+                            include_n_channel=include_n_channel,
                             versionNumber=version['number'],
                             IIRWeightType=version['IIRWeightType'])
                     except OSError as e:
@@ -165,6 +168,7 @@ def parse_spotter_files( input_path = None , output_path=None, output_format='CS
                                 outputFileType=output_format,
                                 outputSpectra=outputSpectra,
                                 lf_filter=lf_filter,
+                                include_n_channel=include_n_channel,
                                 versionNumber=version['number'])
                     os.remove( fileName )
                     #
@@ -434,7 +438,8 @@ def log_errors( error ):
 
 def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
          kind='FLT', reportProgress=True, outputFileType='CSV',
-        versionNumber=defaultVersion,IIRWeightType=defaultIIRWeightType ):
+        versionNumber=defaultVersion,IIRWeightType=defaultIIRWeightType,
+        include_n_channel=False ):
     """
     This functions loads all the gps-location data (located at *path*) from
     a Spotter into one datastructure and saves the result as a CSV file 
@@ -459,30 +464,60 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         # Read the data using pandas, and convert to numpy
         #
-        data = pd.read_csv( inputFileName ,
-                index_col=False , usecols=(1,2,3,4) )
+        usecols = (1,2,3,4)
+        if include_n_channel:
+            try:
+                data = pd.read_csv(
+                    inputFileName,
+                    index_col=False,
+                    usecols=(1,2,3,4,5),
+                )
+            except ValueError:
+                print("WARNING: include_n_channel requested, but outn(mm) was not found. Continuing without n channel.")
+                data = pd.read_csv(
+                    inputFileName,
+                    index_col=False,
+                    usecols=usecols,
+                )
+                include_n_channel = False
+        else:
+            data = pd.read_csv(
+                inputFileName,
+                index_col=False,
+                usecols=usecols,
+            )
+
         data = data.apply(pd.to_numeric,errors='coerce')
         data = data.values
 
         msk = np.isnan( data[:,0] ) | np.isnan( data[:,1] ) | np.isnan( data[:,2] ) | np.isnan( data[:,3] )
         data = data[~msk,:]
         datetime    = epochToDateArray(data[:,0])
-        data        = data[:,1:4]/1000.
+        if include_n_channel:
+            data = data[:,1:5]/1000.
+            n_dims = 4
+        else:
+            data = data[:,1:4]/1000.
+            n_dims = 3
         #
         # Apply phase correction to displacement data
         #
         if applyPhaseCorrection and versionNumber>=applyPhaseCorrectionFromVersionNumber:
             #
             print('- IIR phase correction using weight type: ', str(IIRWeightType ) )
-            for ii in range(0,3):
+            for ii in range(0,n_dims):
                 #
                 data[:,ii] = applyfilter( data[:,ii] , 'backward' , versionNumber, IIRWeightType )
                 #
             #        
         data        = np.concatenate( (datetime,data) , axis=1 )
-            
-        fmt = '%i,'*7  + '%.5e,%.5e,%.5e'
-        header=header+', x (m), y(m), z(m)'
+
+        if include_n_channel:
+            fmt = '%i,'*7  + '%.5e,%.5e,%.5e,%.5e'
+            header=header+', x (m), y(m), z(m), n (m)'
+        else:
+            fmt = '%i,'*7  + '%.5e,%.5e,%.5e'
+            header=header+', x (m), y(m), z(m)'
     elif kind=='SST':
         #
         # Read the data using pandas, and convert to numpy
@@ -540,7 +575,6 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         header=header+', latitude (decimal degrees),longitude (decimal degrees)'
         #
     #
-
     if outputFileType.lower() in ['csv','gz']:
         #
         np.savetxt(outputFileName ,
@@ -555,11 +589,16 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         try:            
             #
             if kind=='FLT':
-                savemat( outputFileName ,
-                    {'x':data[:,7].astype(np.float32),
-                     'y':data[:,8].astype(np.float32),
-                     'z':data[:,9].astype(np.float32),
-                  'time':data[:,0:7].astype(np.int16)} )
+                n_filt_cols_no_n = 10
+                matlab_data = {
+                    'x':data[:,7].astype(np.float32),
+                    'y':data[:,8].astype(np.float32),
+                    'z':data[:,9].astype(np.float32),
+                    'time':data[:,0:7].astype(np.int16),
+                }
+                if include_n_channel and data.shape[1] == n_filt_cols_no_n + 1:
+                    matlab_data['n'] = data[:,10].astype(np.float32)
+                savemat(outputFileName, matlab_data)
             elif kind=='GPS':
                 savemat( outputFileName ,
                     {'Lat':data[:,7].astype(np.float32),
@@ -584,11 +623,15 @@ def parseLocationFiles( inputFileName=None, outputFileName='displacement.CSV',
         #
         if kind=='FLT':
             #
-            np.savez( outputFileName ,
-                x=data[:,7].astype(np.float32),
-                y=data[:,8].astype(np.float32),
-                z=data[:,9].astype(np.float32),
-                time=data[:,0:7].astype(np.int16) )
+            np_data = {
+                'x':data[:,7].astype(np.float32),
+                'y':data[:,8].astype(np.float32),
+                'z':data[:,9].astype(np.float32),
+                'time':data[:,0:7].astype(np.int16),
+            }
+            if include_n_channel and data.shape[1] > 10:
+                np_data['n'] = data[:,10].astype(np.float32)
+            np.savez(outputFileName, **np_data)
             #
         else:
             #
@@ -621,6 +664,7 @@ def parseSpectralFiles( inputFileName=None,
                         outputSpectra=None, 
                         outputFileType='CSV',
                         lf_filter = False,
+                        include_n_channel=False,
                         versionNumber=defaultVersion):
 
     #
@@ -650,6 +694,10 @@ def parseSpectralFiles( inputFileName=None,
             out = 'Cxy'                
         elif key.lower() in ['qxy','qyx']:
             out = 'Qxy'
+        elif key.lower() == 'snn':
+            out = 'Snn'
+        elif key.lower() in ['czn','cnz']:
+            out = 'Czn'
         elif key.lower() in ['a1','b1','a2','b2']:
             out = key.lower()
         else:
@@ -660,6 +708,7 @@ def parseSpectralFiles( inputFileName=None,
     outputFileName= {'Szz':'Szz.CSV','Cxz':'Cxz.CSV','Qxz':'Qxz.CSV',
                      'Cyz':'Cyz.CSV','Qyz':'Qyz.CSV','Cxy':'Cxy.CSV',
                      'Qxy':'Qxy.CSV','Syy':'Syy.CSV','Sxx':'Sxx.CSV',
+                     'Snn':'Snn.CSV','Czn':'Czn.CSV',
                      'a1':'a1.CSV','b2':'b2.CSV','b1':'b1.CSV','a2':'a2.CSV'}
 
     
@@ -681,7 +730,7 @@ def parseSpectralFiles( inputFileName=None,
         #
     #
         
-    # The output  files given by the script; per defauly only Szz is given, but
+    # The output files given by the script; per default only Szz is given, but
     # can be altered by user request
     if outputSpectra is None:
         #
@@ -706,44 +755,93 @@ def parseSpectralFiles( inputFileName=None,
         print('Processing Spotter spectral output')
         #
     #
-    if versionNumber in [0,2,3]:
-        startColumnNumber = {'Szz':5  ,'Cxz':7,
+    legacyStartColumnNumber = {'Szz':5  ,'Cxz':7,
                          'Qxz':13,'Cyz':8,
                          'Qyz':14,'Sxx':3,
                          'Syy':4,  'Cxy':6,
                          'Qxy':12}
-        stride = 12
-    else:
-        #
-        # Column ordering changed from v1.4.1 onwards; extra columns due
-        # to cross-correlation filter between z and w
-        #
-        # Column order is now:
-        #
-        #   type,millis,[0] t0_GPS_Epoch_Time(s), [1] tN_GPS_Epoch_Time(s), 
-        #   [2] ens_count, [3] Sxx_re, [4] Syy_re, [5] Szz_re,[6] Snn_re,
-        #   [7] Sxy_re,[8] Szx_re,[9] Szy_re,[10] Szn_re,[11] Sxx_im,
-        #   [12] Syy_im,[13] Szz_im,[14] Snn_im,[15] Sxy_im,[16] Szx_im,
-        #   [17] Szy_im,[18] Szn_im
-        #
-        # Note that since first two columns are ignorded counting starts from 0
-        # at t0_GPS_Epoch_Time(s)
-        #
-        startColumnNumber = {'Szz':5  ,'Cxz':8,
+    # Column ordering changed from v1.4.1 onwards; extra columns due
+    # to cross-correlation filter between z and w.
+    extendedStartColumnNumber = {'Szz':5  ,'Cxz':8,
                             'Qxz':16,'Cyz':9,
                             'Qyz':17,'Sxx':3,
                             'Syy':4,  'Cxy':7,
                             'Qxy':15, 'Snn':6,
                             'Czn':10, 'Qzn':18}
-        stride = 16
-        #
-    #
+
+    n_header_columns = 5 # type, millis, t0 epoch time, tN epoch time, ensemble number
+    n_legacy_spectra = 6 #sxx, syy, szz, sxy, sxz, syz
+    n_extended_spectra = 8 #sxx, syy, szz, snn, sxy, sxz, syz, szn
+
+    def detect_spc_layout(path):
+        # Detect spectral layout from actual data rows.
+        import csv
+        max_columns = 0
+        with open(path, newline='') as f:
+            reader = csv.reader(f)
+            for idx, row in enumerate(reader):
+                if idx == 0:
+                    continue
+                if len(row) > max_columns:
+                    max_columns = len(row)
+                if idx >= 200:
+                    break
+        if max_columns == n_header_columns + 2 * n_extended_spectra * nf: #factor of 2 for imaginary part of spectra
+            return 'extended'
+        if max_columns == n_header_columns + 2 * n_legacy_spectra * nf:
+            return 'legacy'
+        else:
+            print(f"WARNING: unknown spectral layout in file {path}")
+        return None
+
+    layout = detect_spc_layout(inputFileName)
+    if layout == 'extended':
+        startColumnNumber = extendedStartColumnNumber
+        num_spectra = n_extended_spectra # auto-, co-, and cross-spectra for four channels (x, y, z, and n)
+    elif layout == 'legacy':
+        startColumnNumber = legacyStartColumnNumber
+        num_spectra = n_legacy_spectra # auto-, co-, and cross-spectra for three channels (x, y, and z)
+    elif versionNumber in [0,2,3]: #default to version number for identifying start column number
+        startColumnNumber = legacyStartColumnNumber
+        num_spectra = n_legacy_spectra
+    else:
+        startColumnNumber = extendedStartColumnNumber
+        num_spectra = n_extended_spectra
+
+    stride = 2 * num_spectra # SPC files hold both real and imaginary parts of spectra, so stride is 2x number of spectra
+
+    if not include_n_channel:
+        gated_n_channels = {'Snn', 'Czn'}
+        filtered = []
+        for key in outputSpectra:
+            if key in gated_n_channels:
+                print(f"WARNING: skipping {key} because include_n_channel is disabled.")
+                continue
+            filtered.append(key)
+        outputSpectra = filtered
+
+    available_output = set(startColumnNumber.keys()) | {'a1', 'a2', 'b1', 'b2'}
+    filtered = []
+    for key in outputSpectra:
+        if key not in available_output:
+            print(f"WARNING: requested spectrum {key} is not available in this file format/version; skipping.")
+            continue
+        filtered.append(key)
+    outputSpectra = filtered
+
     # Read csv file using Pandas - this is the only section in the code
     # still reliant on Pandas, and only there due to supposed performance
     # benefits.
-    tmp = pd.read_csv( inputFileName ,
-                index_col=False , skiprows=[0],  header=None,
-                    usecols=tuple(range(2,5+stride*nf)) )
+    # Provide explicit names so mixed-width spectral rows can be parsed when
+    # a file contains both legacy and extended layouts.
+    tmp = pd.read_csv(
+        inputFileName,
+        index_col=False,
+        skiprows=[0],
+        header=None,
+        names=list(range(5 + stride * nf)),
+        usecols=tuple(range(2, 5 + stride * nf)),
+    )
     
     # Ensure the dataframe is numeric, coerce any occurences of bad data
     # (strings etc) to NaN and return a numpy numerica array
@@ -1464,6 +1562,8 @@ Examples:
                        default='CSV', help='Output file format')
     parser.add_argument('--spectra', default='all',
                        help='Spectra to process (e.g., Szz, all, or list)')
+    parser.add_argument('--include_n_channel', action='store_true',
+                       help='Include n displacement/spectral channels when present in raw files')
     
     args = parser.parse_args()
     
@@ -1472,15 +1572,16 @@ Examples:
         args.output_path = os.path.join(args.input_path, 'processed')
     
     # Call the actual processing function
-    parse_spotter_files(
+    parse_kwargs = dict(
         input_path=args.input_path,
         output_path=args.output_path,
         output_format=args.format,
-        spectra=args.spectra
+        spectra=args.spectra,
     )
+    if args.include_n_channel:
+        parse_kwargs['include_n_channel'] = True
+
+    parse_spotter_files(**parse_kwargs)
 
 if __name__ == '__main__':
     cli_main()
-
-
-

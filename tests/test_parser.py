@@ -145,6 +145,55 @@ class TestLocationParsing:
         with pytest.raises(TypeError):  
             parseLocationFiles( inputFileName = inputfn, output_path = output_dir )
 
+    def test_flt_include_n_channel_outputs_n_column(self, tmp_path):
+        inputfn = tmp_path / "test_flt.csv"
+        outputfn = tmp_path / "displacement.csv"
+        inputfn.write_text(
+            "millis,GPS_Epoch_Time(s),outx(mm),outy(mm),outz(mm),outn(mm)\n"
+            "0,1640995200.0,1000,2000,3000,4000\n",
+            encoding="utf-8",
+        )
+
+        parseLocationFiles(
+            inputFileName=str(inputfn),
+            kind='FLT',
+            outputFileName=str(outputfn),
+            include_n_channel=True,
+        )
+
+        assert outputfn.exists()
+        with open(outputfn, 'r', encoding='utf-8') as csvf:
+            header = csvf.readline()
+            firstline = csvf.readline()
+
+        assert "n (m)" in header
+        # Last 4 values are x,y,z,n converted from mm to m.
+        assert firstline.rstrip().endswith("1.00000e+00,2.00000e+00,3.00000e+00,4.00000e+00")
+
+    def test_flt_include_n_channel_missing_outn_falls_back(self, tmp_path):
+        inputfn = tmp_path / "test_flt_old.csv"
+        outputfn = tmp_path / "displacement_old.csv"
+        inputfn.write_text(
+            "millis,GPS_Epoch_Time(s),outx(mm),outy(mm),outz(mm)\n"
+            "0,1640995200.0,1000,2000,3000\n",
+            encoding="utf-8",
+        )
+
+        parseLocationFiles(
+            inputFileName=str(inputfn),
+            kind='FLT',
+            outputFileName=str(outputfn),
+            include_n_channel=True,
+        )
+
+        assert outputfn.exists()
+        with open(outputfn, 'r', encoding='utf-8') as csvf:
+            header = csvf.readline()
+            firstline = csvf.readline()
+
+        assert "n (m)" not in header
+        assert firstline.rstrip().endswith("1.00000e+00,2.00000e+00,3.00000e+00")
+
 class TestParseSpotterData:
     """Tests for the process_spotter_data function."""
     
@@ -255,9 +304,45 @@ class TestCLI:
                     spectra='all'
                 )
 
+    def test_cli_with_include_n_channel(self):
+        test_args = [
+            'sd_file_parser.py',
+            '/input/path',
+            '--include_n_channel',
+        ]
+
+        with patch('sys.argv', test_args):
+            with patch('sd_file_parser.parse_spotter_files') as mock_process:
+                with patch('os.path.join') as mock_join:
+                    mock_join.return_value = '/input/path/processed'
+                    cli_main()
+                    mock_process.assert_called_once_with(
+                        input_path='/input/path',
+                        output_path='/input/path/processed',
+                        output_format='CSV',
+                        spectra='all',
+                        include_n_channel=True,
+                    )
+
 
 class TestParseSpectralFiles:
     """Tests for parseSpectralFiles function."""
+
+    @staticmethod
+    def _write_minimal_spc_csv(path, nf=4, stride=16):
+        # parseSpectralFiles reads columns 2..(5+stride*nf-1), so we create
+        # enough columns to satisfy that usecols slice.
+        total_cols = 5 + stride * nf
+        row = ["0"] * total_cols
+        row[2] = "1640995200.0"  # t0_GPS_Epoch_Time(s)
+        row[4] = "1"             # ens_count
+        # Fill spectrum values with non-zero numeric data.
+        for i in range(5, total_cols):
+            row[i] = str(i)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("header\n")
+            f.write(",".join(row) + "\n")
     
     def test_ExplicitOutputParserRun(self, test_setup):
         """
@@ -286,6 +371,78 @@ class TestParseSpectralFiles:
         # did the output file get created?
         # only Szz gets created by default (see lines 827-829)
         assert os.path.exists(os.path.join(output_path, 'Szz.csv'))
+
+    def test_include_n_channel_outputs_snn_and_czn(self, tmp_path):
+        inputfn = tmp_path / "spc_new.csv"
+        output_path = tmp_path / "out"
+        output_path.mkdir(parents=True, exist_ok=True)
+        self._write_minimal_spc_csv(str(inputfn), nf=4, stride=16)
+
+        parseSpectralFiles(
+            inputFileName=str(inputfn),
+            outputPath=str(output_path),
+            outputSpectra=['Snn', 'Czn'],
+            nf=4,
+            include_n_channel=True,
+            versionNumber=4,
+        )
+
+        assert os.path.exists(output_path / "Snn.csv")
+        assert os.path.exists(output_path / "Czn.csv")
+
+    def test_include_n_channel_skips_when_unavailable(self, tmp_path, capsys):
+        inputfn = tmp_path / "spc_old.csv"
+        output_path = tmp_path / "out_old"
+        output_path.mkdir(parents=True, exist_ok=True)
+        # Old format uses stride 12.
+        self._write_minimal_spc_csv(str(inputfn), nf=4, stride=12)
+
+        parseSpectralFiles(
+            inputFileName=str(inputfn),
+            outputPath=str(output_path),
+            outputSpectra=['Szz', 'Snn', 'Czn'],
+            nf=4,
+            include_n_channel=True,
+            versionNumber=3,
+        )
+
+        captured = capsys.readouterr()
+        assert "not available" in captured.out.lower()
+        assert os.path.exists(output_path / "Szz.csv")
+        assert not os.path.exists(output_path / "Snn.csv")
+        assert not os.path.exists(output_path / "Czn.csv")
+
+    def test_include_n_channel_with_mixed_row_widths(self, tmp_path):
+        inputfn = tmp_path / "spc_mixed.csv"
+        output_path = tmp_path / "out_mixed"
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        legacy_total_cols = 5 + 12 * 4
+        extended_total_cols = 5 + 16 * 4
+        legacy_row = ["0"] * legacy_total_cols
+        extended_row = ["0"] * extended_total_cols
+        for row in (legacy_row, extended_row):
+            row[2] = "1640995200.0"
+            row[4] = "1"
+            for i in range(5, len(row)):
+                row[i] = str(i)
+
+        with open(inputfn, "w", encoding="utf-8") as f:
+            f.write("header\n")
+            f.write(",".join(legacy_row) + "\n")
+            f.write(",".join(extended_row) + "\n")
+
+        parseSpectralFiles(
+            inputFileName=str(inputfn),
+            outputPath=str(output_path),
+            outputSpectra=['Snn', 'Czn'],
+            nf=4,
+            include_n_channel=True,
+            versionNumber=3,
+        )
+
+        assert os.path.exists(output_path / "Snn.csv")
+        assert os.path.exists(output_path / "Czn.csv")
 
 
 # Integration tests
