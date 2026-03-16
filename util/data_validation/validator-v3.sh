@@ -23,7 +23,7 @@ do
    awk '
 BEGIN { 
     FS = "," 
-    fltcols = 7
+    fltcols = 6
     loccols = 5
     sstcols = 2
 }
